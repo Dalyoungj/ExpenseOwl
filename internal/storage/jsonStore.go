@@ -355,6 +355,30 @@ func (s *jsonStore) GetExpense(id string) (Expense, error) {
 	return Expense{}, fmt.Errorf("expense with ID %s not found", id)
 }
 
+func (s *jsonStore) FindDuplicateExpense(name string, category string, amount float64, date time.Time) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data, err := s.readExpensesFile(s.filePath)
+	if err != nil {
+		return false, fmt.Errorf("failed to read storage file: %v", err)
+	}
+	
+	// Normalize date to day precision (ignore time)
+	targetDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+	
+	for _, exp := range data.Expenses {
+		expDate := time.Date(exp.Date.Year(), exp.Date.Month(), exp.Date.Day(), 0, 0, 0, 0, time.UTC)
+		
+		if exp.Name == name &&
+			exp.Category == category &&
+			exp.Amount == amount &&
+			expDate.Equal(targetDate) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *jsonStore) AddExpense(expense Expense) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

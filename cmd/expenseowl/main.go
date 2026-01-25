@@ -87,6 +87,9 @@ func runServer(port int) {
 	http.HandleFunc("/import/csv", handler.ImportCSV)
 	http.HandleFunc("/import/csvold", handler.ImportOldCSV)
 
+	// TRMNL Integration
+	http.HandleFunc("/api/trmnl", handler.GetTRMNLData)
+
 	log.Println("Starting server on port", port, "...")
 	if err := http.ListenAndServe(fmt.Sprint(":", port), nil); err != nil {
 		log.Fatalf("Server failed to start: %v", err)

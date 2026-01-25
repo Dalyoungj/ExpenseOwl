@@ -33,6 +33,7 @@ type Storage interface {
 	// Expenses
 	GetAllExpenses() ([]Expense, error)
 	GetExpense(id string) (Expense, error)
+	FindDuplicateExpense(name string, category string, amount float64, date time.Time) (bool, error)
 	AddExpense(expense Expense) error
 	RemoveExpense(id string) error
 	AddMultipleExpenses(expenses []Expense) error

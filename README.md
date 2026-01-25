@@ -225,3 +225,56 @@ Contributions are welcome; please ensure they align with the project's philosoph
 - Environment variables can be used for system configuration in container and binary
 - Found a typo or need to ask a question? Please open an issue instead of a PR
 - To add a new backend type (say SQL, NocoDB, etc.), a new file can be added in the backend that implements the Storage interface
+
+
+---
+
+# Fork Changes
+
+This fork includes additional features and improvements over the original ExpenseOwl:
+
+## TRMNL Integration
+
+Added `/api/trmnl` endpoint for integration with [TRMNL](https://usetrmnl.com) e-ink displays via Private Plugins.
+
+**Endpoint:** `GET /api/trmnl`
+
+**Response includes:**
+- Current month's financial summary (income, expenses, balance)
+- Top 5 spending categories with amounts and percentages
+- Currency and last updated timestamp
+
+**Example usage with TRMNL:**
+1. Create a Private Plugin with Polling strategy
+2. Set Polling URL to: `https://your-domain.com/api/trmnl`
+3. Use the provided Liquid template to display expense data on your TRMNL device
+
+See [TRMNL Private Plugins documentation](https://help.usetrmnl.com/en/articles/9510536-private-plugins) for setup details.
+
+## Enhanced CSV Import
+
+### Additional Date Formats
+Beyond the standard formats, now supports:
+- `25 Jan 26` (day month 2-digit year)
+- `5 Jan 26` (single-digit day)
+- `25 Jan 2026` (day month 4-digit year)
+- `5 Jan 2026` (single-digit day with full year)
+
+### Header Mapping
+- `Transaction Details` column automatically maps to `name` field
+- Makes it easier to import from various banking and financial apps
+
+### Duplicate Detection
+Automatically skips duplicate entries during import based on:
+- Name
+- Category
+- Amount
+- Date (day precision)
+
+All four fields must match for an entry to be considered a duplicate. This prevents accidental re-imports of the same data while allowing legitimate duplicate transactions (e.g., same coffee shop, same amount, different days).
+
+Works with both JSON and PostgreSQL storage backends.
+
+## Original Repository
+
+This is a fork of [tanq16/expenseowl](https://github.com/tanq16/expenseowl). All credit for the core application goes to the original author.

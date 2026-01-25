@@ -253,6 +253,27 @@ func (s *databaseStore) GetExpense(id string) (Expense, error) {
 	return expense, nil
 }
 
+func (s *databaseStore) FindDuplicateExpense(name string, category string, amount float64, date time.Time) (bool, error) {
+	// Normalize date to day precision (ignore time)
+	targetDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+	nextDay := targetDate.AddDate(0, 0, 1)
+	
+	query := `
+		SELECT COUNT(*) FROM expenses 
+		WHERE name = $1 
+		AND category = $2 
+		AND amount = $3 
+		AND date >= $4 
+		AND date < $5
+	`
+	var count int
+	err := s.db.QueryRow(query, name, category, amount, targetDate, nextDay).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check for duplicate expense: %v", err)
+	}
+	return count > 0, nil
+}
+
 func (s *databaseStore) AddExpense(expense Expense) error {
 	if expense.ID == "" {
 		expense.ID = uuid.New().String()

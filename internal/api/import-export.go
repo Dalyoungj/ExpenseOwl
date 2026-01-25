@@ -86,7 +86,12 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	header := records[0]
 	colMap := make(map[string]int)
 	for i, col := range header {
-		colMap[strings.ToLower(strings.TrimSpace(col))] = i
+		normalized := strings.ToLower(strings.TrimSpace(col))
+		colMap[normalized] = i
+		// Map "transaction details" to "name"
+		if normalized == "transaction details" {
+			colMap["name"] = i
+		}
 	}
 	// Check for mandatory columns
 	requiredCols := []string{"name", "category", "amount", "date"}
@@ -161,7 +166,21 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 			skippedCount++
 			continue
 		}
+		
+		name := strings.TrimSpace(record[colMap["name"]])
 		category := strings.TrimSpace(record[colMap["category"]])
+		
+		// Check for duplicate based on content (name, category, amount, date)
+		isDuplicate, err := h.storage.FindDuplicateExpense(name, category, amount, date)
+		if err != nil {
+			log.Printf("Warning: Error checking for duplicate on row %d: %v\n", i+2, err)
+		} else if isDuplicate {
+			log.Printf("Info: Skipping row %d because identical expense already exists (name: %s, category: %s, amount: %.2f, date: %s)\n", 
+				i+2, name, category, amount, date.Format("2006-01-02"))
+			skippedCount++
+			continue
+		}
+		
 		if _, ok := categorySet[strings.ToLower(category)]; !ok {
 			newCategories = append(newCategories, category)
 			categorySet[strings.ToLower(category)] = true // Add to set to handle duplicates in the same file
@@ -178,7 +197,7 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 		expense := storage.Expense{
-			Name:     strings.TrimSpace(record[colMap["name"]]),
+			Name:     name,
 			Category: category,
 			Amount:   amount,
 			Currency: localCurrency,
@@ -340,6 +359,10 @@ func parseDate(dateStr string) (time.Time, error) {
 		"2006-1-2",
 		"2006/01/02",
 		"2006/1/2",
+		"02 Jan 06",    // 25 Jan 26 format (2-digit day, 2-digit year)
+		"2 Jan 06",     // 5 Jan 26 format (1-digit day, 2-digit year)
+		"02 Jan 2006",  // 25 Jan 2026 format (2-digit day, full year)
+		"2 Jan 2006",   // 5 Jan 2026 format (1-digit day, full year)
 	}
 	for _, format := range dateFormats {
 		if d, err := time.Parse(format, dateStr); err == nil {
