@@ -14,6 +14,8 @@ type TRMNLResponse struct {
 	Balance        float64             `json:"balance"`         // income - expenses
 	Currency       string              `json:"currency"`        // e.g., "usd"
 	TopCategories  []CategorySummary   `json:"top_categories"`  // top 5 expense categories
+	AllCategories  []CategorySummary   `json:"all_categories"`  // all categories with amounts and percentages
+	MonthlyTrend   []MonthlyData       `json:"monthly_trend"`   // last 12 months trend
 	LastUpdated    string              `json:"last_updated"`    // ISO timestamp
 }
 
@@ -21,6 +23,13 @@ type CategorySummary struct {
 	Name       string  `json:"name"`
 	Amount     float64 `json:"amount"`     // absolute value
 	Percentage float64 `json:"percentage"` // percentage of total expenses
+}
+
+type MonthlyData struct {
+	Month         string  `json:"month"`          // e.g., "2026-01" or "Jan 2026"
+	TotalIncome   float64 `json:"total_income"`   // income for the month
+	TotalExpenses float64 `json:"total_expenses"` // expenses for the month
+	Balance       float64 `json:"balance"`        // net balance
 }
 
 // GetTRMNLData returns current month's expense summary for TRMNL polling
@@ -64,7 +73,7 @@ func (h *Handler) GetTRMNLData(w http.ResponseWriter, r *http.Request) {
 		monthEnd = time.Date(now.Year(), now.Month(), startDate, 0, 0, 0, 0, time.UTC)
 	}
 
-	// Calculate totals and category breakdown
+	// Calculate totals and category breakdown for current month
 	var totalIncome, totalExpenses float64
 	categoryTotals := make(map[string]float64)
 
@@ -88,6 +97,12 @@ func (h *Handler) GetTRMNLData(w http.ResponseWriter, r *http.Request) {
 	// Get top 5 categories by spending
 	topCategories := getTopCategories(categoryTotals, totalExpenses, 5)
 
+	// Get all categories sorted by amount
+	allCategories := getTopCategories(categoryTotals, totalExpenses, len(categoryTotals))
+
+	// Calculate last 12 months trend
+	monthlyTrend := calculateMonthlyTrend(expenses, startDate, 12)
+
 	response := TRMNLResponse{
 		Month:         monthStart.Format("January 2006"),
 		TotalIncome:   totalIncome,
@@ -95,6 +110,8 @@ func (h *Handler) GetTRMNLData(w http.ResponseWriter, r *http.Request) {
 		Balance:       totalIncome - totalExpenses,
 		Currency:      currency,
 		TopCategories: topCategories,
+		AllCategories: allCategories,
+		MonthlyTrend:  monthlyTrend,
 		LastUpdated:   time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -132,4 +149,51 @@ func getTopCategories(categoryTotals map[string]float64, totalExpenses float64, 
 		return categories[:limit]
 	}
 	return categories
+}
+
+// calculateMonthlyTrend calculates income, expenses, and balance for the last N months
+func calculateMonthlyTrend(expenses []Expense, startDate int, months int) []MonthlyData {
+	now := time.Now()
+	trend := make([]MonthlyData, 0, months)
+
+	// Calculate for each of the last N months
+	for i := months - 1; i >= 0; i-- {
+		var monthStart, monthEnd time.Time
+
+		// Calculate the target month (going back i months from now)
+		targetDate := now.AddDate(0, -i, 0)
+
+		if targetDate.Day() >= startDate {
+			// Period: startDate of target month to startDate-1 of next month
+			monthStart = time.Date(targetDate.Year(), targetDate.Month(), startDate, 0, 0, 0, 0, time.UTC)
+			monthEnd = time.Date(targetDate.Year(), targetDate.Month()+1, startDate, 0, 0, 0, 0, time.UTC)
+		} else {
+			// Period: startDate of previous month to startDate-1 of target month
+			monthStart = time.Date(targetDate.Year(), targetDate.Month()-1, startDate, 0, 0, 0, 0, time.UTC)
+			monthEnd = time.Date(targetDate.Year(), targetDate.Month(), startDate, 0, 0, 0, 0, time.UTC)
+		}
+
+		// Calculate totals for this month
+		var income, expenseTotal float64
+		for _, expense := range expenses {
+			if expense.Date.Before(monthStart) || expense.Date.After(monthEnd) {
+				continue
+			}
+
+			if expense.Amount >= 0 {
+				income += expense.Amount
+			} else {
+				expenseTotal += -expense.Amount
+			}
+		}
+
+		trend = append(trend, MonthlyData{
+			Month:         monthStart.Format("Jan 2006"),
+			TotalIncome:   income,
+			TotalExpenses: expenseTotal,
+			Balance:       income - expenseTotal,
+		})
+	}
+
+	return trend
 }

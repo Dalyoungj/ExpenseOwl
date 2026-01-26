@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  expenseowl:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      STORAGE_TYPE: postgres
+      STORAGE_URL: postgres:5432/expenseowl
+      STORAGE_USER: expenseowl
+      STORAGE_PASS: expenseowl123
+      STORAGE_SSL: disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: expenseowl
+      POSTGRES_USER: expenseowl
+      POSTGRES_PASSWORD: expenseowl123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U expenseowl"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
