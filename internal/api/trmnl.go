@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/tanq16/expenseowl/internal/storage"
 )
 
 // TRMNLResponse represents the data structure for TRMNL polling
@@ -152,7 +154,7 @@ func getTopCategories(categoryTotals map[string]float64, totalExpenses float64, 
 }
 
 // calculateMonthlyTrend calculates income, expenses, and balance for the last N months
-func calculateMonthlyTrend(expenses []Expense, startDate int, months int) []MonthlyData {
+func calculateMonthlyTrend(expenses []storage.Expense, startDate int, months int) []MonthlyData {
 	now := time.Now()
 	trend := make([]MonthlyData, 0, months)
 
