@@ -1,7 +1,16 @@
 const colorPalette = [
-    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', 
-    '#FFBE0B', '#FF006E', '#8338EC', '#3A86FF', 
-    '#FB5607', '#38B000', '#9B5DE5', '#F15BB5'
+    '#FF6B6B', // Coral Red
+    '#4ECDC4', // Turquoise
+    '#45B7D1', // Sky Blue
+    '#FFA07A', // Light Salmon
+    '#98D8C8', // Mint
+    '#F7DC6F', // Yellow
+    '#BB8FCE', // Lavender
+    '#85C1E2', // Light Blue
+    '#F8B739', // Orange
+    '#52B788', // Green
+    '#E76F51', // Terra Cotta
+    '#A8DADC'  // Powder Blue
 ];
 const currencyBehaviors = {
     usd: {symbol: "$", useComma: false, useDecimals: true, useSpace: false, right: false},
