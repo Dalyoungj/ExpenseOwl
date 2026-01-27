@@ -251,6 +251,40 @@ Added `/api/trmnl` endpoint for integration with [TRMNL](https://usetrmnl.com) e
 
 See [TRMNL Private Plugins documentation](https://help.usetrmnl.com/en/articles/9510536-private-plugins) for setup details.
 
+## SubCategory Support
+
+Added hierarchical expense classification with subcategories for finer-grained expense tracking.
+
+**Features:**
+- Organize expenses with subcategories within main categories (e.g., "Restaurants" under "Food")
+- Automatic subcategory assignment during CSV import via configurable mapping rules
+- Interactive dashboard drill-down: click a category to view subcategory breakdown with breadcrumb navigation
+- Table view displays and allows editing of subcategories
+- Mobile-optimized: subcategories hidden in list view, available during editing
+- Works with both JSON and PostgreSQL storage backends
+
+**CSV Import Mapping:**
+Configure automatic subcategory assignment based on transaction names:
+- Pattern matching (exact or substring)
+- First-match rule precedence
+- Automatic creation of new subcategories during import
+- **Smart mapping behavior:**
+  - If CSV has no category column: mapping rules set both main category and subcategory
+  - If CSV has category column: mapping rules only set subcategory (respects existing category)
+
+**Dashboard Interaction:**
+- Click any category slice to drill down into subcategory breakdown
+- Breadcrumb navigation shows "All Categories > [Selected Category]"
+- View subcategory amounts and percentages relative to the selected category
+- Click "All Categories" in breadcrumb to return to main view
+- If a category has no subcategories, a message indicates no data is available
+
+**Settings Management:**
+- Add, remove, and rename subcategories per category
+- Configure mapping rules for automatic CSV import
+- Subcategory uniqueness validation within each category
+- Removing a subcategory preserves existing expenses with that subcategory
+
 ## Enhanced CSV Import
 
 ### Additional Date Formats

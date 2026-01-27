@@ -40,6 +40,16 @@ type Storage interface {
 	RemoveMultipleExpenses(ids []string) error
 	UpdateExpense(id string, expense Expense) error
 
+	// SubCategory Management
+	GetSubCategories(category string) ([]string, error)
+	AddSubCategory(category string, subCategory string) error
+	RemoveSubCategory(category string, subCategory string) error
+	RenameSubCategory(category string, oldName string, newName string) error
+
+	// SubCategory Mapping
+	GetSubCategoryMappings() ([]SubCategoryMappingRule, error)
+	UpdateSubCategoryMappings(rules []SubCategoryMappingRule) error
+
 	// Potential Future Feature: Multi-currency
 	// GetConversions() (map[string]float64, error)
 	// UpdateConversions(conversions map[string]float64) error
@@ -47,11 +57,20 @@ type Storage interface {
 
 // config for expense data
 type Config struct {
-	Categories        []string           `json:"categories"`
-	Currency          string             `json:"currency"`
-	StartDate         int                `json:"startDate"`
-	RecurringExpenses []RecurringExpense `json:"recurringExpenses"`
+	Categories        []string                   `json:"categories"`
+	SubCategories     map[string][]string        `json:"subCategories"`
+	SubCategoryMap    []SubCategoryMappingRule   `json:"subCategoryMap"`
+	Currency          string                     `json:"currency"`
+	StartDate         int                        `json:"startDate"`
+	RecurringExpenses []RecurringExpense         `json:"recurringExpenses"`
 	// Tags              []string           `json:"tags"`
+}
+
+type SubCategoryMappingRule struct {
+	Pattern     string `json:"pattern"`
+	MatchType   string `json:"matchType"`
+	Category    string `json:"category"`
+	SubCategory string `json:"subCategory"`
 }
 
 type RecurringExpense struct {
@@ -89,6 +108,7 @@ type Expense struct {
 	Name        string    `json:"name"`
 	Tags        []string  `json:"tags"`
 	Category    string    `json:"category"`
+	SubCategory string    `json:"subCategory"`
 	Amount      float64   `json:"amount"`
 	Currency    string    `json:"currency"`
 	Date        time.Time `json:"date"`
@@ -96,6 +116,8 @@ type Expense struct {
 
 func (c *Config) SetBaseConfig() {
 	c.Categories = defaultCategories
+	c.SubCategories = make(map[string][]string)
+	c.SubCategoryMap = []SubCategoryMappingRule{}
 	c.Currency = "usd"
 	c.StartDate = 1
 	// c.Tags = []string{}
@@ -192,6 +214,10 @@ func (e *Expense) Validate() error {
 		}
 		e.Tags = cleanedTags
 	}
+	// Sanitize subcategory if present
+	if e.SubCategory != "" {
+		e.SubCategory = SanitizeString(e.SubCategory)
+	}
 	if e.Date.IsZero() {
 		return fmt.Errorf("expense 'date' cannot be empty")
 	}
@@ -232,6 +258,26 @@ func (e *RecurringExpense) Validate() error {
 		return fmt.Errorf("invalid interval: '%s'. Must be one of 'daily', 'weekly', 'monthly', or 'yearly'", e.Interval)
 	}
 	return nil
+}
+
+// ValidateSubCategory validates that a subcategory belongs to the specified category
+func ValidateSubCategory(storage Storage, category string, subCategory string) error {
+	if subCategory == "" {
+		return nil // Empty subcategory is valid
+	}
+
+	subCategories, err := storage.GetSubCategories(category)
+	if err != nil {
+		return err
+	}
+
+	for _, sc := range subCategories {
+		if sc == subCategory {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("subcategory '%s' does not belong to category '%s'", subCategory, category)
 }
 
 // variables

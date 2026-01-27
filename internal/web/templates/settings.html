@@ -58,6 +58,66 @@
             </div>
         </div>
 
+        <div class="form-container">
+            <h2 align="center">SubCategory Settings</h2>
+            <div id="subcategories-manager">
+                <div class="form-group">
+                    <label for="subcategoryFilterCategory">Filter by Category</label>
+                    <select id="subcategoryFilterCategory">
+                        <option value="">All Categories</option>
+                    </select>
+                </div>
+                <div id="subcategories-list" class="subcategories-list">
+                </div>
+                <h3 style="margin-top: 2rem;">Add New SubCategory</h3>
+                <div class="subcategory-input-container">
+                    <select id="newSubCategoryCategory" required>
+                        <option value="">Select Category</option>
+                    </select>
+                    <input type="text" id="newSubCategory" placeholder="SubCategory name">
+                    <button id="addSubCategory" class="nav-button">Add</button>
+                </div>
+                <div id="subcategoriesMessage" class="form-message"></div>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <h2 align="center">SubCategory Mapping Rules</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                Mapping rules automatically assign subcategories during CSV import based on transaction names.
+            </p>
+            <div id="mapping-rules-manager">
+                <div id="mapping-rules-list" class="mapping-rules-list">
+                </div>
+                <h3 style="margin-top: 2rem;">Add New Mapping Rule</h3>
+                <div class="mapping-rule-form">
+                    <div class="form-group">
+                        <label for="newRulePattern">Pattern</label>
+                        <input type="text" id="newRulePattern" placeholder="e.g., Starbucks" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="newRuleMatchType">Match Type</label>
+                        <select id="newRuleMatchType" required>
+                            <option value="contains">Contains</option>
+                            <option value="exact">Exact</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="newRuleCategory">Category</label>
+                        <select id="newRuleCategory" required>
+                            <option value="">Select Category</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="newRuleSubCategory">SubCategory</label>
+                        <input type="text" id="newRuleSubCategory" placeholder="e.g., Coffee" required>
+                    </div>
+                    <button id="addMappingRule" class="nav-button">Add Rule</button>
+                </div>
+                <div id="mappingRulesMessage" class="form-message"></div>
+            </div>
+        </div>
+
         <div class="settings-container">
             <div class="form-container half-width">
                 <h2 align="center">Currency Settings</h2>
@@ -389,6 +449,311 @@
             } catch (error) {
                 console.error('Error saving categories:', error);
                 showMessage('categoriesMessage', 'Error saving categories', false);
+            }
+        }
+
+        // --- SubCategory Management ---
+        let subCategories = {};
+        let mappingRules = [];
+
+        function populateSubCategorySelects() {
+            const filterSelect = document.getElementById('subcategoryFilterCategory');
+            const addSelect = document.getElementById('newSubCategoryCategory');
+            const ruleSelect = document.getElementById('newRuleCategory');
+            
+            filterSelect.innerHTML = '<option value="">-- Select a Category --</option>' +
+                categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            
+            addSelect.innerHTML = '<option value="">Select Category</option>' +
+                categories.map(c => `<option value="${c}">${c}</option>`).join('');
+            
+            ruleSelect.innerHTML = '<option value="">Select Category</option>' +
+                categories.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+
+        async function fetchSubCategories() {
+            try {
+                const response = await fetch('/config');
+                if (!response.ok) throw new Error('Failed to fetch config');
+                const config = await response.json();
+                subCategories = config.subCategories || {};
+                renderSubCategories();
+            } catch (error) {
+                console.error('Error fetching subcategories:', error);
+                showMessage('subcategoriesMessage', 'Failed to load subcategories', false);
+            }
+        }
+
+        function renderSubCategories() {
+            const list = document.getElementById('subcategories-list');
+            const filterCategory = document.getElementById('subcategoryFilterCategory').value;
+            
+            list.innerHTML = '';
+            
+            // If no category is selected, show a message
+            if (!filterCategory) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.textContent = 'Select a category above to view and manage its subcategories';
+                emptyMsg.style.color = 'var(--text-secondary)';
+                emptyMsg.style.fontStyle = 'italic';
+                emptyMsg.style.textAlign = 'center';
+                emptyMsg.style.padding = '2rem';
+                list.appendChild(emptyMsg);
+                return;
+            }
+            
+            const categoriesToShow = [filterCategory];
+            
+            categoriesToShow.forEach(category => {
+                const subs = subCategories[category] || [];
+                
+                const categorySection = document.createElement('div');
+                categorySection.className = 'subcategory-section';
+                
+                const categoryHeader = document.createElement('h4');
+                categoryHeader.textContent = category;
+                categoryHeader.style.marginTop = '1rem';
+                categoryHeader.style.marginBottom = '0.5rem';
+                categorySection.appendChild(categoryHeader);
+                
+                if (subs.length === 0) {
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.textContent = 'No subcategories';
+                    emptyMsg.style.color = '#999';
+                    emptyMsg.style.fontStyle = 'italic';
+                    categorySection.appendChild(emptyMsg);
+                } else {
+                    subs.forEach(sub => {
+                        const item = document.createElement('div');
+                        item.className = 'subcategory-item';
+                        item.innerHTML = `
+                            <span>${sub}</span>
+                            <div class="subcategory-actions">
+                                <button class="edit-button" onclick="showRenameSubCategoryDialog('${category}', '${sub}')">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button class="delete-button" onclick="removeSubCategory('${category}', '${sub}')">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        `;
+                        categorySection.appendChild(item);
+                    });
+                }
+                
+                list.appendChild(categorySection);
+            });
+        }
+
+        async function addSubCategory() {
+            const category = document.getElementById('newSubCategoryCategory').value;
+            const subCategory = document.getElementById('newSubCategory').value.trim();
+            
+            if (!category) {
+                showMessage('subcategoriesMessage', 'Please select a category', false);
+                return;
+            }
+            
+            if (!subCategory) {
+                showMessage('subcategoriesMessage', 'SubCategory name cannot be empty', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch('/subcategory', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, subCategory })
+                });
+                
+                if (response.ok) {
+                    showMessage('subcategoriesMessage', 'SubCategory added successfully', true);
+                    document.getElementById('newSubCategory').value = '';
+                    await fetchSubCategories();
+                } else {
+                    const error = await response.json();
+                    showMessage('subcategoriesMessage', `Failed to add subcategory: ${error.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error adding subcategory:', error);
+                showMessage('subcategoriesMessage', 'Error adding subcategory', false);
+            }
+        }
+
+        async function removeSubCategory(category, subCategory) {
+            if (!confirm(`Are you sure you want to remove "${subCategory}" from "${category}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/subcategory/delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, subCategory })
+                });
+                
+                if (response.ok) {
+                    showMessage('subcategoriesMessage', 'SubCategory removed successfully', true);
+                    await fetchSubCategories();
+                } else {
+                    const error = await response.json();
+                    showMessage('subcategoriesMessage', `Failed to remove subcategory: ${error.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error removing subcategory:', error);
+                showMessage('subcategoriesMessage', 'Error removing subcategory', false);
+            }
+        }
+
+        function showRenameSubCategoryDialog(category, oldName) {
+            const newName = prompt(`Rename "${oldName}" to:`, oldName);
+            if (newName && newName.trim() && newName !== oldName) {
+                renameSubCategory(category, oldName, newName.trim());
+            }
+        }
+
+        async function renameSubCategory(category, oldName, newName) {
+            try {
+                const response = await fetch('/subcategory/rename', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, oldName, newName })
+                });
+                
+                if (response.ok) {
+                    showMessage('subcategoriesMessage', 'SubCategory renamed successfully', true);
+                    await fetchSubCategories();
+                } else {
+                    const error = await response.json();
+                    showMessage('subcategoriesMessage', `Failed to rename subcategory: ${error.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error renaming subcategory:', error);
+                showMessage('subcategoriesMessage', 'Error renaming subcategory', false);
+            }
+        }
+
+        // --- Mapping Rules Management ---
+        async function fetchMappingRules() {
+            try {
+                const response = await fetch('/subcategory-mappings');
+                if (!response.ok) throw new Error('Failed to fetch mapping rules');
+                mappingRules = await response.json() || [];
+                renderMappingRules();
+            } catch (error) {
+                console.error('Error fetching mapping rules:', error);
+                showMessage('mappingRulesMessage', 'Failed to load mapping rules', false);
+            }
+        }
+
+        function renderMappingRules() {
+            const list = document.getElementById('mapping-rules-list');
+            
+            if (mappingRules.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-secondary); font-style: italic;">No mapping rules configured</p>';
+                return;
+            }
+            
+            list.innerHTML = '';
+            
+            mappingRules.forEach((rule, index) => {
+                const item = document.createElement('div');
+                item.className = 'mapping-rule-item';
+                item.innerHTML = `
+                    <div class="mapping-rule-details">
+                        <div class="mapping-rule-pattern">
+                            <strong>Pattern:</strong> "${rule.pattern}" 
+                            <span class="mapping-rule-badge">${rule.matchType}</span>
+                        </div>
+                        <div class="mapping-rule-target">
+                            <strong>→</strong> ${rule.category} / ${rule.subCategory}
+                        </div>
+                    </div>
+                    <button class="delete-button" onclick="removeMappingRule(${index})">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function addMappingRule() {
+            const pattern = document.getElementById('newRulePattern').value.trim();
+            const matchType = document.getElementById('newRuleMatchType').value;
+            const category = document.getElementById('newRuleCategory').value;
+            const subCategory = document.getElementById('newRuleSubCategory').value.trim();
+            
+            if (!pattern) {
+                showMessage('mappingRulesMessage', 'Pattern is required', false);
+                return;
+            }
+            
+            if (!matchType) {
+                showMessage('mappingRulesMessage', 'Match type is required', false);
+                return;
+            }
+            
+            if (!category) {
+                showMessage('mappingRulesMessage', 'Category is required', false);
+                return;
+            }
+            
+            if (!subCategory) {
+                showMessage('mappingRulesMessage', 'SubCategory is required', false);
+                return;
+            }
+            
+            const newRule = { pattern, matchType, category, subCategory };
+            const updatedRules = [...mappingRules, newRule];
+            
+            try {
+                const response = await fetch('/subcategory-mappings/edit', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedRules)
+                });
+                
+                if (response.ok) {
+                    showMessage('mappingRulesMessage', 'Mapping rule added successfully', true);
+                    document.getElementById('newRulePattern').value = '';
+                    document.getElementById('newRuleSubCategory').value = '';
+                    document.getElementById('newRuleMatchType').value = 'contains';
+                    document.getElementById('newRuleCategory').value = '';
+                    await fetchMappingRules();
+                } else {
+                    const error = await response.json();
+                    showMessage('mappingRulesMessage', `Failed to add mapping rule: ${error.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error adding mapping rule:', error);
+                showMessage('mappingRulesMessage', 'Error adding mapping rule', false);
+            }
+        }
+
+        async function removeMappingRule(index) {
+            if (!confirm('Are you sure you want to remove this mapping rule?')) {
+                return;
+            }
+            
+            const updatedRules = mappingRules.filter((_, i) => i !== index);
+            
+            try {
+                const response = await fetch('/subcategory-mappings/edit', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedRules)
+                });
+                
+                if (response.ok) {
+                    showMessage('mappingRulesMessage', 'Mapping rule removed successfully', true);
+                    await fetchMappingRules();
+                } else {
+                    const error = await response.json();
+                    showMessage('mappingRulesMessage', `Failed to remove mapping rule: ${error.error}`, false);
+                }
+            } catch (error) {
+                console.error('Error removing mapping rule:', error);
+                showMessage('mappingRulesMessage', 'Error removing mapping rule', false);
             }
         }
         
@@ -784,11 +1149,15 @@
                 categories = [...config.categories];
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
+                subCategories = config.subCategories || {};
                 allTags.clear();
                 (expenses || []).forEach(exp => (exp.tags || []).forEach(tag => allTags.add(tag)));
                 (recurringExpenses || []).forEach(exp => (exp.tags || []).forEach(tag => allTags.add(tag)));
 
                 renderCategories();
+                populateSubCategorySelects();
+                // Don't render subcategories initially - wait for user to select a category
+                await fetchMappingRules();
                 populateCurrencySelect();
                 populateStartDateInput();
                 document.getElementById('recurringCategory').innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
@@ -836,6 +1205,12 @@
         document.getElementById('csv-import-file').addEventListener('change', handleCsvImport);
         document.getElementById('csv-import-file-old').addEventListener('change', handleCsvImportOld);
         document.getElementById('newCategory').addEventListener('keypress', e => e.key === 'Enter' && addCategory());
+        
+        document.getElementById('addSubCategory').addEventListener('click', addSubCategory);
+        document.getElementById('subcategoryFilterCategory').addEventListener('change', renderSubCategories);
+        document.getElementById('newSubCategory').addEventListener('keypress', e => e.key === 'Enter' && addSubCategory());
+        
+        document.getElementById('addMappingRule').addEventListener('click', addMappingRule);
 
         document.getElementById('recurringExpenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -883,6 +1258,9 @@
         window.showRecurringEditModal = showRecurringEditModal;
         window.closeRecurringEditModal = closeRecurringEditModal;
         window.confirmRecurringUpdate = confirmRecurringUpdate;
+        window.removeSubCategory = removeSubCategory;
+        window.showRenameSubCategoryDialog = showRenameSubCategoryDialog;
+        window.removeMappingRule = removeMappingRule;
     </script>
 </body>
 </html>

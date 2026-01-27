@@ -360,6 +360,188 @@ func (h *Handler) DeleteRecurringExpense(w http.ResponseWriter, r *http.Request)
 }
 
 // ------------------------------------------------------------
+// SubCategory Handlers
+// ------------------------------------------------------------
+
+func (h *Handler) GetSubCategories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	category := r.URL.Query().Get("category")
+	if category == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "category parameter is required"})
+		return
+	}
+	subCategories, err := h.storage.GetSubCategories(category)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to get subcategories"})
+		log.Printf("API ERROR: Failed to get subcategories: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, subCategories)
+}
+
+func (h *Handler) AddSubCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload struct {
+		Category    string `json:"category"`
+		SubCategory string `json:"subCategory"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	if payload.Category == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "category is required"})
+		return
+	}
+	if payload.SubCategory == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "subCategory is required"})
+		return
+	}
+	// Sanitize subcategory name
+	sanitized := storage.SanitizeString(payload.SubCategory)
+	if sanitized == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "subCategory cannot be empty or contain only invalid characters"})
+		return
+	}
+	if err := h.storage.AddSubCategory(payload.Category, sanitized); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		log.Printf("API ERROR: Failed to add subcategory: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (h *Handler) RemoveSubCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload struct {
+		Category    string `json:"category"`
+		SubCategory string `json:"subCategory"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	if payload.Category == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "category is required"})
+		return
+	}
+	if payload.SubCategory == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "subCategory is required"})
+		return
+	}
+	if err := h.storage.RemoveSubCategory(payload.Category, payload.SubCategory); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		log.Printf("API ERROR: Failed to remove subcategory: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (h *Handler) RenameSubCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload struct {
+		Category    string `json:"category"`
+		OldName     string `json:"oldName"`
+		NewName     string `json:"newName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	if payload.Category == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "category is required"})
+		return
+	}
+	if payload.OldName == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "oldName is required"})
+		return
+	}
+	if payload.NewName == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "newName is required"})
+		return
+	}
+	// Sanitize new name
+	sanitized := storage.SanitizeString(payload.NewName)
+	if sanitized == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "newName cannot be empty or contain only invalid characters"})
+		return
+	}
+	if err := h.storage.RenameSubCategory(payload.Category, payload.OldName, sanitized); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		log.Printf("API ERROR: Failed to rename subcategory: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+func (h *Handler) GetSubCategoryMappings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	mappings, err := h.storage.GetSubCategoryMappings()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to get subcategory mappings"})
+		log.Printf("API ERROR: Failed to get subcategory mappings: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, mappings)
+}
+
+func (h *Handler) UpdateSubCategoryMappings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var rules []storage.SubCategoryMappingRule
+	if err := json.NewDecoder(r.Body).Decode(&rules); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	// Validate mapping rules
+	for i, rule := range rules {
+		if rule.Pattern == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("mapping rule %d: pattern is required", i)})
+			return
+		}
+		if rule.MatchType == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("mapping rule %d: matchType is required", i)})
+			return
+		}
+		if rule.MatchType != "exact" && rule.MatchType != "contains" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("mapping rule %d: invalid match type '%s', must be 'exact' or 'contains'", i, rule.MatchType)})
+			return
+		}
+		if rule.Category == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("mapping rule %d: category is required", i)})
+			return
+		}
+		if rule.SubCategory == "" {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("mapping rule %d: subCategory is required", i)})
+			return
+		}
+	}
+	if err := h.storage.UpdateSubCategoryMappings(rules); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update subcategory mappings"})
+		log.Printf("API ERROR: Failed to update subcategory mappings: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+// ------------------------------------------------------------
 // Static and UI Handlers
 // ------------------------------------------------------------
 

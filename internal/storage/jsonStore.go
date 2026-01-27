@@ -494,3 +494,122 @@ func (s *jsonStore) UpdateExpense(id string, expense Expense) error {
 	log.Printf("Edited expense with ID %s\n", id)
 	return s.writeExpensesFile(s.filePath, data)
 }
+
+// SubCategory Management
+
+func (s *jsonStore) GetSubCategories(category string) ([]string, error) {
+	config, err := s.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.SubCategories == nil {
+		return []string{}, nil
+	}
+	subCategories, exists := config.SubCategories[category]
+	if !exists {
+		return []string{}, nil
+	}
+	return subCategories, nil
+}
+
+func (s *jsonStore) AddSubCategory(category string, subCategory string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	config, err := s.readConfigFile(s.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+	if config.SubCategories == nil {
+		config.SubCategories = make(map[string][]string)
+	}
+	// Check if subcategory already exists
+	for _, sc := range config.SubCategories[category] {
+		if sc == subCategory {
+			return fmt.Errorf("subcategory '%s' already exists in category '%s'", subCategory, category)
+		}
+	}
+	config.SubCategories[category] = append(config.SubCategories[category], subCategory)
+	return s.writeConfigFile(s.configPath, config)
+}
+
+func (s *jsonStore) RemoveSubCategory(category string, subCategory string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	config, err := s.readConfigFile(s.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+	if config.SubCategories == nil {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+	}
+	subCategories, exists := config.SubCategories[category]
+	if !exists {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+	}
+	found := false
+	var updatedSubCategories []string
+	for _, sc := range subCategories {
+		if sc != subCategory {
+			updatedSubCategories = append(updatedSubCategories, sc)
+		} else {
+			found = true
+		}
+	}
+	if !found {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+	}
+	config.SubCategories[category] = updatedSubCategories
+	return s.writeConfigFile(s.configPath, config)
+}
+
+func (s *jsonStore) RenameSubCategory(category string, oldName string, newName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	config, err := s.readConfigFile(s.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+	if config.SubCategories == nil {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+	}
+	subCategories, exists := config.SubCategories[category]
+	if !exists {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+	}
+	found := false
+	for i, sc := range subCategories {
+		if sc == oldName {
+			config.SubCategories[category][i] = newName
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+	}
+	return s.writeConfigFile(s.configPath, config)
+}
+
+// SubCategory Mapping
+
+func (s *jsonStore) GetSubCategoryMappings() ([]SubCategoryMappingRule, error) {
+	config, err := s.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.SubCategoryMap == nil {
+		return []SubCategoryMappingRule{}, nil
+	}
+	return config.SubCategoryMap, nil
+}
+
+func (s *jsonStore) UpdateSubCategoryMappings(rules []SubCategoryMappingRule) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	config, err := s.readConfigFile(s.configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %v", err)
+	}
+	config.SubCategoryMap = rules
+	return s.writeConfigFile(s.configPath, config)
+}

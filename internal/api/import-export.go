@@ -31,7 +31,7 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	defer writer.Flush()
 
 	// Write header
-	headers := []string{"ID", "Name", "Category", "Amount", "Date", "Tags"}
+	headers := []string{"ID", "Name", "Category", "SubCategory", "Amount", "Date", "Tags"}
 	if err := writer.Write(headers); err != nil {
 		log.Printf("API ERROR: Failed to write CSV header: %v\n", err)
 		return
@@ -43,6 +43,7 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 			expense.ID,
 			expense.Name,
 			expense.Category,
+			expense.SubCategory,
 			// expense.Currency,
 			strconv.FormatFloat(expense.Amount, 'f', 2, 64),
 			expense.Date.Format(time.RFC3339),
@@ -94,7 +95,7 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// Check for mandatory columns
-	requiredCols := []string{"name", "category", "amount", "date"}
+	requiredCols := []string{"name", "amount", "date"}
 	for _, col := range requiredCols {
 		if _, ok := colMap[col]; !ok {
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("Missing required column: %s", col)})
@@ -105,6 +106,8 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	idIdx, idExists := colMap["id"]
 	tagsIdx, tagsExists := colMap["tags"]
 	currencyIdx, currencyExists := colMap["currency"]
+	categoryIdx, categoryExists := colMap["category"]
+	subCategoryIdx, subCategoryExists := colMap["subcategory"]
 
 	currentCategories, err := h.storage.GetCategories()
 	if err != nil {
@@ -115,6 +118,22 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 	for _, cat := range currentCategories {
 		categorySet[strings.ToLower(cat)] = true
 	}
+	
+	// Load subcategory mappings and create mapping engine
+	mappingRules, err := h.storage.GetSubCategoryMappings()
+	if err != nil {
+		log.Printf("Warning: Could not retrieve subcategory mappings: %v\n", err)
+		mappingRules = []storage.SubCategoryMappingRule{}
+	}
+	mappingEngine, err := NewMappingEngine(mappingRules)
+	if err != nil {
+		log.Printf("Warning: Could not create mapping engine: %v\n", err)
+		mappingEngine = nil
+	}
+	
+	// Track new subcategories to add
+	newSubCategories := make(map[string]map[string]bool) // category -> set of subcategories
+	
 	var newCategories []string
 	var importedCount, skippedCount int
 	// TODO: might be worth setting default currency when we have currency updation behavior
@@ -168,7 +187,27 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		
 		name := strings.TrimSpace(record[colMap["name"]])
-		category := strings.TrimSpace(record[colMap["category"]])
+		
+		// Handle category - either from CSV or from mapping rules
+		var category string
+		if categoryExists {
+			category = strings.TrimSpace(record[categoryIdx])
+		}
+		
+		// If no category from CSV and we have mapping engine, try to get category from mapping
+		if category == "" && mappingEngine != nil {
+			mappedCategory, _ := mappingEngine.ApplyMappingWithCategory(name)
+			if mappedCategory != "" {
+				category = mappedCategory
+			}
+		}
+		
+		// If still no category, skip this row
+		if category == "" {
+			log.Printf("Warning: Skipping row %d due to missing category\n", i+2)
+			skippedCount++
+			continue
+		}
 		
 		// Check for duplicate based on content (name, category, amount, date)
 		isDuplicate, err := h.storage.FindDuplicateExpense(name, category, amount, date)
@@ -185,6 +224,38 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 			newCategories = append(newCategories, category)
 			categorySet[strings.ToLower(category)] = true // Add to set to handle duplicates in the same file
 		}
+		
+		// Handle subcategory
+		var subCategory string
+		
+		// First, check if SubCategory column exists in CSV
+		if subCategoryExists && record[subCategoryIdx] != "" {
+			subCategory = strings.TrimSpace(record[subCategoryIdx])
+		}
+		
+		// If no subcategory from CSV, apply mapping engine
+		if subCategory == "" && mappingEngine != nil {
+			if categoryExists {
+				// CSV has category column - only map subcategory
+				subCategory = mappingEngine.ApplyMapping(name, category)
+			} else {
+				// CSV doesn't have category column - get subcategory from full mapping
+				_, subCategory = mappingEngine.ApplyMappingWithCategory(name)
+			}
+		}
+		
+		// If we have a subcategory, validate and track it
+		if subCategory != "" {
+			// Validate subcategory against category
+			if err := storage.ValidateSubCategory(h.storage, category, subCategory); err != nil {
+				// SubCategory doesn't exist yet, track it for creation
+				if newSubCategories[category] == nil {
+					newSubCategories[category] = make(map[string]bool)
+				}
+				newSubCategories[category][subCategory] = true
+			}
+		}
+		
 		var tags []string
 		if tagsExists {
 			tagsStr := record[tagsIdx]
@@ -197,12 +268,13 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 		}
 
 		expense := storage.Expense{
-			Name:     name,
-			Category: category,
-			Amount:   amount,
-			Currency: localCurrency,
-			Date:     date,
-			Tags:     tags,
+			Name:        name,
+			Category:    category,
+			SubCategory: subCategory,
+			Amount:      amount,
+			Currency:    localCurrency,
+			Date:        date,
+			Tags:        tags,
 		}
 		if err := expense.Validate(); err != nil {
 			log.Printf("Warning: Skipping row %d due to validation error: %v\n", i+2, err)
@@ -223,6 +295,18 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Warning: Failed to add new categories to config: %v\n", err)
 		}
 	}
+	
+	// Add new subcategories to config
+	if len(newSubCategories) > 0 {
+		for category, subCats := range newSubCategories {
+			for subCat := range subCats {
+				if err := h.storage.AddSubCategory(category, subCat); err != nil {
+					log.Printf("Warning: Failed to add subcategory '%s' to category '%s': %v\n", subCat, category, err)
+				}
+			}
+		}
+	}
+	
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":          "success",
 		"total_processed": len(records) - 1,

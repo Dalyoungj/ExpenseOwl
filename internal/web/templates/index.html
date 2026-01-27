@@ -55,6 +55,8 @@
             <button id="nextMonth" class="nav-button"><i class="fa-solid fa-arrow-right"></i></button>
         </div>
 
+        <div id="breadcrumb" class="breadcrumb-container"></div>
+
         <div class="table-controls">
             <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Add Expense</button>
         </div>
@@ -148,6 +150,8 @@
         let categoryColors = {};
         let allTags = new Set();
         let selectedTags = new Set();
+        let viewMode = 'category'; // 'category' or 'subcategory'
+        let selectedCategory = null;
 
         function assignCategoryColors(categories) {
             categories.forEach((category, index) => {
@@ -155,6 +159,63 @@
                     categoryColors[category] = colorPalette[index % colorPalette.length];
                 }
             });
+        }
+
+        function renderBreadcrumb() {
+            const breadcrumbContainer = document.getElementById('breadcrumb');
+            
+            if (viewMode === 'category') {
+                breadcrumbContainer.innerHTML = '<span class="breadcrumb-current">All Categories</span>';
+            } else {
+                breadcrumbContainer.innerHTML = `
+                    <a href="#" class="breadcrumb-link" onclick="returnToCategoryView(); return false;">All Categories</a>
+                    <span class="breadcrumb-separator"> &gt; </span>
+                    <span class="breadcrumb-current">${escapeHTML(selectedCategory)}</span>
+                `;
+            }
+        }
+
+        function drillDownToSubCategories(category) {
+            selectedCategory = category;
+            viewMode = 'subcategory';
+            
+            // Assign colors to subcategories starting from the parent category's color
+            const monthExpenses = getMonthExpenses(allExpenses);
+            const subCategories = [...new Set(monthExpenses
+                .filter(exp => exp.category === category && exp.subCategory)
+                .map(exp => exp.subCategory))];
+            
+            // Check if there are any uncategorized items
+            const hasUncategorized = monthExpenses.some(exp => 
+                exp.category === category && !exp.subCategory && exp.amount < 0
+            );
+            
+            // Find the parent category's color index in the palette
+            const parentColor = categoryColors[category];
+            const parentColorIndex = colorPalette.indexOf(parentColor);
+            const startIndex = parentColorIndex >= 0 ? parentColorIndex : 0;
+            
+            subCategories.forEach((subCategory, index) => {
+                if (!categoryColors[subCategory]) {
+                    // Start from parent category's color position in the palette
+                    categoryColors[subCategory] = colorPalette[(startIndex + index) % colorPalette.length];
+                }
+            });
+            
+            // Assign a neutral gray color to "Uncategorized"
+            if (hasUncategorized && !categoryColors['Uncategorized']) {
+                categoryColors['Uncategorized'] = '#9E9E9E'; // Gray color
+            }
+            
+            renderBreadcrumb();
+            updateChartAndLegend();
+        }
+
+        function returnToCategoryView() {
+            viewMode = 'category';
+            selectedCategory = null;
+            renderBreadcrumb();
+            updateChartAndLegend();
         }
 
         function calculateCategoryBreakdown(expenses) {
@@ -170,6 +231,42 @@
             return Object.entries(categoryTotals)
                 .map(([category, total]) => ({
                     category,
+                    total,
+                    percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
+                }))
+                .sort((a, b) => b.total - a.total);
+        }
+
+        function calculateSubCategoryBreakdown(expenses, category) {
+            const subCategoryTotals = {};
+            let uncategorizedTotal = 0;
+            let totalAmount = 0;
+            
+            expenses.forEach(exp => {
+                if (exp.amount < 0 && exp.category === category) {
+                    const amount = Math.abs(exp.amount);
+                    
+                    if (exp.subCategory) {
+                        // Has subcategory
+                        subCategoryTotals[exp.subCategory] = 
+                            (subCategoryTotals[exp.subCategory] || 0) + amount;
+                    } else {
+                        // No subcategory - group as "Uncategorized"
+                        uncategorizedTotal += amount;
+                    }
+                    
+                    totalAmount += amount;
+                }
+            });
+            
+            // Add uncategorized items if any exist
+            if (uncategorizedTotal > 0) {
+                subCategoryTotals['Uncategorized'] = uncategorizedTotal;
+            }
+            
+            return Object.entries(subCategoryTotals)
+                .map(([subCategory, total]) => ({
+                    category: subCategory,
                     total,
                     percentage: totalAmount > 0 ? (total / totalAmount) * 100 : 0
                 }))
@@ -210,7 +307,24 @@
                 cashflowSection.style.display = 'flex';
                 noDataMessage.style.display = 'none';
                 
-                const categoryData = calculateCategoryBreakdown(monthExpenses);
+                let categoryData;
+                if (viewMode === 'category') {
+                    categoryData = calculateCategoryBreakdown(monthExpenses);
+                } else {
+                    categoryData = calculateSubCategoryBreakdown(monthExpenses, selectedCategory);
+                    
+                    // If no subcategories found, show message
+                    if (categoryData.length === 0) {
+                        legendBox.innerHTML = '<div class="no-data">No subcategory data available for this category.</div>';
+                        if (pieChart) {
+                            pieChart.destroy();
+                            pieChart = null;
+                        }
+                        chartBox.style.display = 'none';
+                        return;
+                    }
+                }
+                
                 updateCashflow(monthExpenses);
                 createPieChart(categoryData);
                 updateLegend(categoryData);
@@ -266,6 +380,22 @@
                                 }
                             }
                         }
+                    },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0 && viewMode === 'category') {
+                            const index = elements[0].index;
+                            const category = categoryData[index].category;
+                            
+                            // Check if category has subcategories before drilling down
+                            const monthExpenses = getMonthExpenses(allExpenses);
+                            const hasSubCategories = monthExpenses.some(exp => 
+                                exp.category === category && exp.subCategory
+                            );
+                            
+                            if (hasSubCategories) {
+                                drillDownToSubCategories(category);
+                            }
+                        }
                     }
                 }
             });
@@ -275,51 +405,112 @@
             const legendContainer = document.getElementById('customLegend');
             legendContainer.innerHTML = '';
             const monthExpenses = getMonthExpenses(allExpenses);
-            const currentMonthCategories = [...new Set(monthExpenses
-                .filter(exp => exp.amount < 0)
-                .map(exp => exp.category))];
-            const categoryMap = new Map(categoryData.map(cat => [cat.category, cat]));
             
-            currentMonthCategories.sort((a, b) => {
-                const dataA = categoryMap.get(a);
-                const dataB = categoryMap.get(b);
-                if (dataA && dataB) return dataB.total - dataA.total;
-                if (dataA) return -1;
-                if (dataB) return 1;
-                return a.localeCompare(b);
-            }).forEach(category => {
-                const item = document.createElement('div');
-                item.className = `legend-item${disabledCategories.has(category) ? ' disabled' : ''}`;
-                const color = categoryColors[category];
-                const categoryDataItem = categoryMap.get(category);
-                const percentage = categoryDataItem ? ` (${categoryDataItem.percentage.toFixed(1)}%)` : '';
-                const amount = categoryDataItem ? formatCurrency(categoryDataItem.total) : '';
-                item.innerHTML = `
-                    <div class="color-box" style="background-color: ${color}"></div>
-                    <div class="legend-text">
-                        <span>${category}${percentage}</span>
-                        <span class="amount">${amount}</span>
+            if (viewMode === 'category') {
+                const currentMonthCategories = [...new Set(monthExpenses
+                    .filter(exp => exp.amount < 0)
+                    .map(exp => exp.category))];
+                const categoryMap = new Map(categoryData.map(cat => [cat.category, cat]));
+                
+                currentMonthCategories.sort((a, b) => {
+                    const dataA = categoryMap.get(a);
+                    const dataB = categoryMap.get(b);
+                    if (dataA && dataB) return dataB.total - dataA.total;
+                    if (dataA) return -1;
+                    if (dataB) return 1;
+                    return a.localeCompare(b);
+                }).forEach(category => {
+                    const item = document.createElement('div');
+                    const isDisabled = disabledCategories.has(category);
+                    item.className = `legend-item${isDisabled ? ' disabled' : ''}`;
+                    const color = categoryColors[category];
+                    const categoryDataItem = categoryMap.get(category);
+                    const percentage = categoryDataItem ? ` (${categoryDataItem.percentage.toFixed(1)}%)` : '';
+                    const amount = categoryDataItem ? formatCurrency(categoryDataItem.total) : '';
+                    
+                    // Check if category has subcategories
+                    const hasSubCategories = monthExpenses.some(exp => 
+                        exp.category === category && exp.subCategory
+                    );
+                    
+                    // Use different icon based on disabled state
+                    const buttonIcon = isDisabled ? '+' : '×';
+                    const buttonTitle = isDisabled ? 'Include category' : 'Exclude category';
+                    
+                    // Add clickable class only if has subcategories
+                    const textCursor = hasSubCategories ? 'cursor: pointer;' : 'cursor: default;';
+                    
+                    item.innerHTML = `
+                        <div class="color-box" style="background-color: ${color}"></div>
+                        <div class="legend-text" style="${textCursor} flex: 1;">
+                            <span>${category}${percentage}</span>
+                            <span class="amount">${amount}</span>
+                        </div>
+                        <button class="legend-toggle-btn" title="${buttonTitle}">${buttonIcon}</button>
+                    `;
+                    
+                    // Click on text area = drill down (only if has subcategories)
+                    const textArea = item.querySelector('.legend-text');
+                    if (hasSubCategories) {
+                        textArea.addEventListener('click', () => drillDownToSubCategories(category));
+                    }
+                    
+                    // Click on button = toggle exclude
+                    const toggleBtn = item.querySelector('.legend-toggle-btn');
+                    toggleBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleCategory(category);
+                    });
+                    
+                    legendContainer.appendChild(item);
+                });
+
+                const activeTotalExpenses = monthExpenses
+                    .filter(exp => exp.amount < 0 && !disabledCategories.has(exp.category))
+                    .reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
+
+                const totalsHtml = `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Total:</span>
+                            <span class="amount">
+                                ${formatCurrency(activeTotalExpenses)}
+                            </span>
+                        </div>
                     </div>
                 `;
-                item.addEventListener('click', () => toggleCategory(category));
-                legendContainer.appendChild(item);
-            });
+                legendContainer.insertAdjacentHTML('beforeend', totalsHtml);
+            } else {
+                // Subcategory view - no toggling, just display
+                categoryData.forEach((subCat, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+                    // Use the color from the chart data which matches the pie chart colors
+                    const color = categoryColors[subCat.category]; // This should already be set correctly
+                    item.innerHTML = `
+                        <div class="color-box" style="background-color: ${color}"></div>
+                        <div class="legend-text">
+                            <span>${escapeHTML(subCat.category)} (${subCat.percentage.toFixed(1)}%)</span>
+                            <span class="amount">${formatCurrency(subCat.total)}</span>
+                        </div>
+                    `;
+                    legendContainer.appendChild(item);
+                });
 
-            const activeTotalExpenses = monthExpenses
-                .filter(exp => exp.amount < 0 && !disabledCategories.has(exp.category))
-                .reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
+                const totalSubCategoryExpenses = categoryData.reduce((sum, subCat) => sum + subCat.total, 0);
 
-            const totalsHtml = `
-                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>Total:</span>
-                        <span class="amount">
-                            ${formatCurrency(activeTotalExpenses)}
-                        </span>
+                const totalsHtml = `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Total:</span>
+                            <span class="amount">
+                                ${formatCurrency(totalSubCategoryExpenses)}
+                            </span>
+                        </div>
                     </div>
-                </div>
-            `;
-            legendContainer.insertAdjacentHTML('beforeend', totalsHtml);
+                `;
+                legendContainer.insertAdjacentHTML('beforeend', totalsHtml);
+            }
         }
 
         function toggleCategory(category) {
@@ -358,6 +549,7 @@
                 const uniqueCategories = [...new Set(allExpenses.map(exp => exp.category))];
                 assignCategoryColors(uniqueCategories);
                 updateMonthDisplay();
+                renderBreadcrumb();
                 updateChartAndLegend();
                 setupTagInput();
             } catch (error) {
@@ -453,13 +645,19 @@
 
         document.getElementById('prevMonth').addEventListener('click', () => {
             currentDate.setMonth(currentDate.getMonth() - 1);
+            viewMode = 'category';
+            selectedCategory = null;
             updateMonthDisplay();
+            renderBreadcrumb();
             updateChartAndLegend();
         });
 
         document.getElementById('nextMonth').addEventListener('click', () => {
             currentDate.setMonth(currentDate.getMonth() + 1);
+            viewMode = 'category';
+            selectedCategory = null;
             updateMonthDisplay();
+            renderBreadcrumb();
             updateChartAndLegend();
         });
 

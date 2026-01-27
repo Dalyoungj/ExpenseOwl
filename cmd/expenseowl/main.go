@@ -69,6 +69,14 @@ func runServer(port int) {
 	// http.HandleFunc("/tags", handler.GetTags)
 	// http.HandleFunc("/tags/edit", handler.UpdateTags)
 
+	// SubCategories
+	http.HandleFunc("/subcategories", handler.GetSubCategories)           // GET with ?category=
+	http.HandleFunc("/subcategory", handler.AddSubCategory)               // PUT for add
+	http.HandleFunc("/subcategory/delete", handler.RemoveSubCategory)     // DELETE
+	http.HandleFunc("/subcategory/rename", handler.RenameSubCategory)     // PUT for rename
+	http.HandleFunc("/subcategory-mappings", handler.GetSubCategoryMappings)    // GET
+	http.HandleFunc("/subcategory-mappings/edit", handler.UpdateSubCategoryMappings) // PUT
+
 	// Expenses
 	http.HandleFunc("/expense", handler.AddExpense)                     // PUT for add
 	http.HandleFunc("/expenses", handler.GetExpenses)                   // GET all

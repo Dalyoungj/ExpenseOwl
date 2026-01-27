@@ -26,6 +26,7 @@ const (
 		recurring_id VARCHAR(36),
 		name VARCHAR(255) NOT NULL,
 		category VARCHAR(255) NOT NULL,
+		subcategory VARCHAR(255),
 		amount NUMERIC(10, 2) NOT NULL,
 		currency VARCHAR(3) NOT NULL,
 		date TIMESTAMPTZ NOT NULL,
@@ -50,7 +51,9 @@ const (
 		id VARCHAR(255) PRIMARY KEY DEFAULT 'default',
 		categories TEXT NOT NULL,
 		currency VARCHAR(255) NOT NULL,
-		start_date INTEGER NOT NULL
+		start_date INTEGER NOT NULL,
+		subcategories TEXT,
+		subcategory_mappings TEXT
 	);`
 )
 
@@ -81,6 +84,76 @@ func createTables(db *sql.DB) error {
 			return err
 		}
 	}
+	// Run migration for existing databases
+	if err := migrateSubCategorySupport(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// migrateSubCategorySupport adds subcategory columns to existing tables if they don't exist
+func migrateSubCategorySupport(db *sql.DB) error {
+	// Check if subcategory column exists in expenses table
+	var columnExists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'expenses' AND column_name = 'subcategory'
+		)
+	`).Scan(&columnExists)
+	if err != nil {
+		return fmt.Errorf("failed to check for subcategory column: %v", err)
+	}
+	
+	// Add subcategory column to expenses table if it doesn't exist
+	if !columnExists {
+		_, err = db.Exec(`ALTER TABLE expenses ADD COLUMN subcategory VARCHAR(255)`)
+		if err != nil {
+			return fmt.Errorf("failed to add subcategory column to expenses: %v", err)
+		}
+		log.Println("Added subcategory column to expenses table")
+	}
+	
+	// Check if subcategories column exists in config table
+	err = db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'config' AND column_name = 'subcategories'
+		)
+	`).Scan(&columnExists)
+	if err != nil {
+		return fmt.Errorf("failed to check for subcategories column: %v", err)
+	}
+	
+	// Add subcategories column to config table if it doesn't exist
+	if !columnExists {
+		_, err = db.Exec(`ALTER TABLE config ADD COLUMN subcategories TEXT`)
+		if err != nil {
+			return fmt.Errorf("failed to add subcategories column to config: %v", err)
+		}
+		log.Println("Added subcategories column to config table")
+	}
+	
+	// Check if subcategory_mappings column exists in config table
+	err = db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns 
+			WHERE table_name = 'config' AND column_name = 'subcategory_mappings'
+		)
+	`).Scan(&columnExists)
+	if err != nil {
+		return fmt.Errorf("failed to check for subcategory_mappings column: %v", err)
+	}
+	
+	// Add subcategory_mappings column to config table if it doesn't exist
+	if !columnExists {
+		_, err = db.Exec(`ALTER TABLE config ADD COLUMN subcategory_mappings TEXT`)
+		if err != nil {
+			return fmt.Errorf("failed to add subcategory_mappings column to config: %v", err)
+		}
+		log.Println("Added subcategory_mappings column to config table")
+	}
+	
 	return nil
 }
 
@@ -93,15 +166,25 @@ func (s *databaseStore) saveConfig(config *Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal categories: %v", err)
 	}
+	subCategoriesJSON, err := json.Marshal(config.SubCategories)
+	if err != nil {
+		return fmt.Errorf("failed to marshal subcategories: %v", err)
+	}
+	subCategoryMapJSON, err := json.Marshal(config.SubCategoryMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal subcategory map: %v", err)
+	}
 	query := `
-		INSERT INTO config (id, categories, currency, start_date)
-		VALUES ('default', $1, $2, $3)
+		INSERT INTO config (id, categories, currency, start_date, subcategories, subcategory_mappings)
+		VALUES ('default', $1, $2, $3, $4, $5)
 		ON CONFLICT (id) DO UPDATE SET
 			categories = EXCLUDED.categories,
 			currency = EXCLUDED.currency,
-			start_date = EXCLUDED.start_date;
+			start_date = EXCLUDED.start_date,
+			subcategories = EXCLUDED.subcategories,
+			subcategory_mappings = EXCLUDED.subcategory_mappings;
 	`
-	_, err = s.db.Exec(query, string(categoriesJSON), config.Currency, config.StartDate)
+	_, err = s.db.Exec(query, string(categoriesJSON), config.Currency, config.StartDate, string(subCategoriesJSON), string(subCategoryMapJSON))
 	s.defaults["currency"] = config.Currency
 	s.defaults["start_date"] = fmt.Sprintf("%d", config.StartDate)
 	return err
@@ -119,10 +202,10 @@ func (s *databaseStore) updateConfig(updater func(c *Config) error) error {
 }
 
 func (s *databaseStore) GetConfig() (*Config, error) {
-	query := `SELECT categories, currency, start_date FROM config WHERE id = 'default'`
-	var categoriesStr, currency string
+	query := `SELECT categories, currency, start_date, subcategories, subcategory_mappings FROM config WHERE id = 'default'`
+	var categoriesStr, currency, subCategoriesStr, subCategoryMapStr string
 	var startDate int
-	err := s.db.QueryRow(query).Scan(&categoriesStr, &currency, &startDate)
+	err := s.db.QueryRow(query).Scan(&categoriesStr, &currency, &startDate, &subCategoriesStr, &subCategoryMapStr)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -141,6 +224,24 @@ func (s *databaseStore) GetConfig() (*Config, error) {
 	config.StartDate = startDate
 	if err := json.Unmarshal([]byte(categoriesStr), &config.Categories); err != nil {
 		return nil, fmt.Errorf("failed to parse categories from db: %v", err)
+	}
+	
+	// Parse subcategories (handle null/empty)
+	if subCategoriesStr != "" {
+		if err := json.Unmarshal([]byte(subCategoriesStr), &config.SubCategories); err != nil {
+			return nil, fmt.Errorf("failed to parse subcategories from db: %v", err)
+		}
+	} else {
+		config.SubCategories = make(map[string][]string)
+	}
+	
+	// Parse subcategory mappings (handle null/empty)
+	if subCategoryMapStr != "" {
+		if err := json.Unmarshal([]byte(subCategoryMapStr), &config.SubCategoryMap); err != nil {
+			return nil, fmt.Errorf("failed to parse subcategory map from db: %v", err)
+		}
+	} else {
+		config.SubCategoryMap = []SubCategoryMappingRule{}
 	}
 
 	recurring, err := s.GetRecurringExpenses()
@@ -207,12 +308,16 @@ func scanExpense(scanner interface{ Scan(...any) error }) (Expense, error) {
 	var expense Expense
 	var tagsStr sql.NullString
 	var recurringID sql.NullString
-	err := scanner.Scan(&expense.ID, &recurringID, &expense.Name, &expense.Category, &expense.Amount, &expense.Date, &tagsStr)
+	var subCategory sql.NullString
+	err := scanner.Scan(&expense.ID, &recurringID, &expense.Name, &expense.Category, &subCategory, &expense.Amount, &expense.Date, &tagsStr)
 	if err != nil {
 		return Expense{}, err
 	}
 	if recurringID.Valid {
 		expense.RecurringID = recurringID.String
+	}
+	if subCategory.Valid {
+		expense.SubCategory = subCategory.String
 	}
 	if tagsStr.Valid && tagsStr.String != "" {
 		if err := json.Unmarshal([]byte(tagsStr.String), &expense.Tags); err != nil {
@@ -223,7 +328,7 @@ func scanExpense(scanner interface{ Scan(...any) error }) (Expense, error) {
 }
 
 func (s *databaseStore) GetAllExpenses() ([]Expense, error) {
-	query := `SELECT id, recurring_id, name, category, amount, date, tags FROM expenses ORDER BY date DESC`
+	query := `SELECT id, recurring_id, name, category, subcategory, amount, date, tags FROM expenses ORDER BY date DESC`
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expenses: %v", err)
@@ -242,7 +347,7 @@ func (s *databaseStore) GetAllExpenses() ([]Expense, error) {
 }
 
 func (s *databaseStore) GetExpense(id string) (Expense, error) {
-	query := `SELECT id, recurring_id, name, category, amount, date, tags FROM expenses WHERE id = $1`
+	query := `SELECT id, recurring_id, name, category, subcategory, amount, date, tags FROM expenses WHERE id = $1`
 	expense, err := scanExpense(s.db.QueryRow(query, id))
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -289,10 +394,10 @@ func (s *databaseStore) AddExpense(expense Expense) error {
 		return err
 	}
 	query := `
-		INSERT INTO expenses (id, recurring_id, name, category, amount, currency, date, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO expenses (id, recurring_id, name, category, subcategory, amount, currency, date, tags)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err = s.db.Exec(query, expense.ID, expense.RecurringID, expense.Name, expense.Category, expense.Amount, expense.Currency, expense.Date, string(tagsJSON))
+	_, err = s.db.Exec(query, expense.ID, expense.RecurringID, expense.Name, expense.Category, expense.SubCategory, expense.Amount, expense.Currency, expense.Date, string(tagsJSON))
 	return err
 }
 
@@ -307,10 +412,10 @@ func (s *databaseStore) UpdateExpense(id string, expense Expense) error {
 	}
 	query := `
 		UPDATE expenses
-		SET name = $1, category = $2, amount = $3, currency = $4, date = $5, tags = $6, recurring_id = $7
-		WHERE id = $8
+		SET name = $1, category = $2, subcategory = $3, amount = $4, currency = $5, date = $6, tags = $7, recurring_id = $8
+		WHERE id = $9
 	`
-	result, err := s.db.Exec(query, expense.Name, expense.Category, expense.Amount, expense.Currency, expense.Date, string(tagsJSON), expense.RecurringID, id)
+	result, err := s.db.Exec(query, expense.Name, expense.Category, expense.SubCategory, expense.Amount, expense.Currency, expense.Date, string(tagsJSON), expense.RecurringID, id)
 	if err != nil {
 		return fmt.Errorf("failed to update expense: %v", err)
 	}
@@ -435,14 +540,14 @@ func (s *databaseStore) AddRecurringExpense(recurringExpense RecurringExpense) e
 
 	expensesToAdd := generateExpensesFromRecurring(recurringExpense, false)
 	if len(expensesToAdd) > 0 {
-		stmt, err := tx.Prepare(pq.CopyIn("expenses", "id", "recurring_id", "name", "category", "amount", "currency", "date", "tags"))
+		stmt, err := tx.Prepare(pq.CopyIn("expenses", "id", "recurring_id", "name", "category", "subcategory", "amount", "currency", "date", "tags"))
 		if err != nil {
 			return fmt.Errorf("failed to prepare copy in: %v", err)
 		}
 		defer stmt.Close()
 		for _, exp := range expensesToAdd {
 			expTagsJSON, _ := json.Marshal(exp.Tags)
-			_, err = stmt.Exec(exp.ID, exp.RecurringID, exp.Name, exp.Category, exp.Amount, exp.Currency, exp.Date, string(expTagsJSON))
+			_, err = stmt.Exec(exp.ID, exp.RecurringID, exp.Name, exp.Category, exp.SubCategory, exp.Amount, exp.Currency, exp.Date, string(expTagsJSON))
 			if err != nil {
 				return fmt.Errorf("failed to execute copy in: %v", err)
 			}
@@ -493,14 +598,14 @@ func (s *databaseStore) UpdateRecurringExpense(id string, recurringExpense Recur
 
 	expensesToAdd := generateExpensesFromRecurring(recurringExpense, !updateAll)
 	if len(expensesToAdd) > 0 {
-		stmt, err := tx.Prepare(pq.CopyIn("expenses", "id", "recurring_id", "name", "category", "amount", "currency", "date", "tags"))
+		stmt, err := tx.Prepare(pq.CopyIn("expenses", "id", "recurring_id", "name", "category", "subcategory", "amount", "currency", "date", "tags"))
 		if err != nil {
 			return fmt.Errorf("failed to prepare copy in for update: %v", err)
 		}
 		defer stmt.Close()
 		for _, exp := range expensesToAdd {
 			expTagsJSON, _ := json.Marshal(exp.Tags)
-			_, err = stmt.Exec(exp.ID, exp.RecurringID, exp.Name, exp.Category, exp.Amount, exp.Currency, exp.Date, string(expTagsJSON))
+			_, err = stmt.Exec(exp.ID, exp.RecurringID, exp.Name, exp.Category, exp.SubCategory, exp.Amount, exp.Currency, exp.Date, string(expTagsJSON))
 			if err != nil {
 				return fmt.Errorf("failed to execute copy in for update: %v", err)
 			}
@@ -596,4 +701,107 @@ func generateExpensesFromRecurring(recExp RecurringExpense, fromToday bool) []Ex
 		}
 	}
 	return expenses
+}
+
+// SubCategory Management
+
+func (s *databaseStore) GetSubCategories(category string) ([]string, error) {
+	config, err := s.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.SubCategories == nil {
+		return []string{}, nil
+	}
+	subCategories, exists := config.SubCategories[category]
+	if !exists {
+		return []string{}, nil
+	}
+	return subCategories, nil
+}
+
+func (s *databaseStore) AddSubCategory(category string, subCategory string) error {
+	return s.updateConfig(func(c *Config) error {
+		if c.SubCategories == nil {
+			c.SubCategories = make(map[string][]string)
+		}
+		// Check if subcategory already exists
+		for _, sc := range c.SubCategories[category] {
+			if sc == subCategory {
+				return fmt.Errorf("subcategory '%s' already exists in category '%s'", subCategory, category)
+			}
+		}
+		c.SubCategories[category] = append(c.SubCategories[category], subCategory)
+		return nil
+	})
+}
+
+func (s *databaseStore) RemoveSubCategory(category string, subCategory string) error {
+	return s.updateConfig(func(c *Config) error {
+		if c.SubCategories == nil {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+		}
+		subCategories, exists := c.SubCategories[category]
+		if !exists {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+		}
+		found := false
+		var updatedSubCategories []string
+		for _, sc := range subCategories {
+			if sc != subCategory {
+				updatedSubCategories = append(updatedSubCategories, sc)
+			} else {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", subCategory, category)
+		}
+		c.SubCategories[category] = updatedSubCategories
+		return nil
+	})
+}
+
+func (s *databaseStore) RenameSubCategory(category string, oldName string, newName string) error {
+	return s.updateConfig(func(c *Config) error {
+		if c.SubCategories == nil {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+		}
+		subCategories, exists := c.SubCategories[category]
+		if !exists {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+		}
+		found := false
+		for i, sc := range subCategories {
+			if sc == oldName {
+				c.SubCategories[category][i] = newName
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("subcategory '%s' not found in category '%s'", oldName, category)
+		}
+		return nil
+	})
+}
+
+// SubCategory Mapping
+
+func (s *databaseStore) GetSubCategoryMappings() ([]SubCategoryMappingRule, error) {
+	config, err := s.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.SubCategoryMap == nil {
+		return []SubCategoryMappingRule{}, nil
+	}
+	return config.SubCategoryMap, nil
+}
+
+func (s *databaseStore) UpdateSubCategoryMappings(rules []SubCategoryMappingRule) error {
+	return s.updateConfig(func(c *Config) error {
+		c.SubCategoryMap = rules
+		return nil
+	})
 }

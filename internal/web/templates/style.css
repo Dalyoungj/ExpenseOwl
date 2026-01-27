@@ -65,6 +65,33 @@ header {
     margin-bottom: 1rem;
 }
 
+.breadcrumb-container {
+    padding: 10px 0;
+    font-size: 14px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.breadcrumb-link {
+    color: var(--accent);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.breadcrumb-link:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-separator {
+    color: var(--text-secondary);
+    margin: 0 8px;
+}
+
+.breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
 .nav-button, .edit-button {
     background-color: var(--bg-primary);
     border: 1px solid var(--border);
@@ -138,8 +165,40 @@ header {
     display: flex;
     align-items: center;
     margin-bottom: 1rem;
-    cursor: pointer;
     user-select: none;
+    position: relative;
+}
+
+.legend-item .legend-text {
+    cursor: pointer;
+}
+
+.legend-toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 8px;
+    margin-left: 8px;
+    line-height: 1;
+    opacity: 0.6;
+    transition: opacity 0.2s, color 0.2s;
+}
+
+.legend-toggle-btn:hover {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
+.legend-item.disabled .legend-toggle-btn {
+    color: #4CAF50; /* Green color for + icon */
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.legend-item.disabled .legend-toggle-btn:hover {
+    color: #45a049;
 }
 
 .legend-item.disabled .color-box {
@@ -441,6 +500,132 @@ header {
     color: var(--text-primary);
 }
 
+.subcategories-list {
+    margin-bottom: 1rem;
+}
+
+.subcategory-section {
+    margin-bottom: 1.5rem;
+}
+
+.subcategory-item {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.subcategory-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.subcategory-actions .edit-button,
+.subcategory-actions .delete-button {
+    padding: 0.25rem 0.5rem;
+    height: auto;
+    width: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+}
+
+.subcategory-input-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    align-items: center;
+}
+
+.subcategory-input-container select,
+.subcategory-input-container input {
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.subcategory-input-container select {
+    min-width: 150px;
+}
+
+.subcategory-input-container select:focus,
+.subcategory-input-container input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.subcategory-input-container input {
+    flex: 1;
+}
+
+.mapping-rules-list {
+    margin-bottom: 1rem;
+}
+
+.mapping-rule-item {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.mapping-rule-details {
+    flex: 1;
+}
+
+.mapping-rule-pattern {
+    margin-bottom: 0.25rem;
+}
+
+.mapping-rule-badge {
+    display: inline-block;
+    background-color: var(--accent);
+    color: var(--bg-primary);
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: 0.5rem;
+}
+
+.mapping-rule-target {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.mapping-rule-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.mapping-rule-form .form-group {
+    margin-bottom: 0;
+}
+
+.mapping-rule-form button {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+    .mapping-rule-form {
+        grid-template-columns: 1fr;
+    }
+}
+
 .export-buttons {
     display: flex;
     gap: 1rem;
@@ -589,7 +774,15 @@ header {
     border-radius: 4px;
     background-color: var(--bg-primary);
     color: var(--text-primary);
+    font-size: 1rem;
     min-width: 200px;
+}
+
+.start-date-manager input:focus,
+.currency-selector select:focus,
+.theme-selector select:focus {
+    outline: none;
+    border-color: var(--accent);
 }
 
 .tags-input-container {
@@ -705,7 +898,8 @@ header {
 
     .date-column,
     .date-header,
-    .tags-column {
+    .tags-column,
+    .subcategory-column {
         display: none;
     }
 
