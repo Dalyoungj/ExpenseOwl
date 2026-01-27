@@ -960,6 +960,30 @@ header {
     .expense-form {
         grid-template-columns: 1fr;
     }
+
+    .subcategory-input-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .subcategory-input-container select,
+    .subcategory-input-container input,
+    .subcategory-input-container button {
+        width: 100%;
+    }
+
+    .category-input-container {
+        flex-direction: column;
+    }
+
+    .category-input-container input,
+    .category-input-container button {
+        width: 100%;
+    }
+
+    .mapping-rule-form {
+        grid-template-columns: 1fr;
+    }
 }
 
 .form-container {
