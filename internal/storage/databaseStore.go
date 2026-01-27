@@ -203,7 +203,8 @@ func (s *databaseStore) updateConfig(updater func(c *Config) error) error {
 
 func (s *databaseStore) GetConfig() (*Config, error) {
 	query := `SELECT categories, currency, start_date, subcategories, subcategory_mappings FROM config WHERE id = 'default'`
-	var categoriesStr, currency, subCategoriesStr, subCategoryMapStr string
+	var categoriesStr, currency string
+	var subCategoriesStr, subCategoryMapStr sql.NullString
 	var startDate int
 	err := s.db.QueryRow(query).Scan(&categoriesStr, &currency, &startDate, &subCategoriesStr, &subCategoryMapStr)
 
@@ -227,8 +228,8 @@ func (s *databaseStore) GetConfig() (*Config, error) {
 	}
 	
 	// Parse subcategories (handle null/empty)
-	if subCategoriesStr != "" {
-		if err := json.Unmarshal([]byte(subCategoriesStr), &config.SubCategories); err != nil {
+	if subCategoriesStr.Valid && subCategoriesStr.String != "" {
+		if err := json.Unmarshal([]byte(subCategoriesStr.String), &config.SubCategories); err != nil {
 			return nil, fmt.Errorf("failed to parse subcategories from db: %v", err)
 		}
 	} else {
@@ -236,8 +237,8 @@ func (s *databaseStore) GetConfig() (*Config, error) {
 	}
 	
 	// Parse subcategory mappings (handle null/empty)
-	if subCategoryMapStr != "" {
-		if err := json.Unmarshal([]byte(subCategoryMapStr), &config.SubCategoryMap); err != nil {
+	if subCategoryMapStr.Valid && subCategoryMapStr.String != "" {
+		if err := json.Unmarshal([]byte(subCategoryMapStr.String), &config.SubCategoryMap); err != nil {
 			return nil, fmt.Errorf("failed to parse subcategory map from db: %v", err)
 		}
 	} else {
