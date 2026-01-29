@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/fa.min.css">
-    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/style.css?v=2">
     <script>
         (function() {
             const theme = localStorage.getItem('theme') || 'system';
@@ -43,6 +43,10 @@
         </div>
         
         <div class="table-controls">
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search expenses..." />
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            </div>
             <label for="showAllToggle">
                 <input type="checkbox" id="showAllToggle" class="styled-checkbox"> Show All Transactions
             </label>
@@ -127,9 +131,11 @@
         let currentDate = new Date();
         let allExpenses = [];
         let expensesForTable = [];
+        let filteredExpenses = [];
         let startDate = 1;
         let allTags = new Set();
         let selectedTags = new Set();
+        let searchQuery = '';
 
         async function updateSubCategoryOptions(category) {
             const subCategorySelect = document.getElementById('subCategory');
@@ -199,13 +205,47 @@
             `;
         }
 
+        function filterExpenses(expenses, query) {
+            if (!query || query.trim() === '') {
+                return expenses;
+            }
+            
+            const lowerQuery = query.toLowerCase().trim();
+            return expenses.filter(expense => {
+                // Search in name
+                if (expense.name && expense.name.toLowerCase().includes(lowerQuery)) {
+                    return true;
+                }
+                // Search in category
+                if (expense.category && expense.category.toLowerCase().includes(lowerQuery)) {
+                    return true;
+                }
+                // Search in subcategory
+                if (expense.subCategory && expense.subCategory.toLowerCase().includes(lowerQuery)) {
+                    return true;
+                }
+                // Search in tags
+                if (expense.tags && expense.tags.some(tag => tag.toLowerCase().includes(lowerQuery))) {
+                    return true;
+                }
+                // Search in amount (convert to string)
+                if (expense.amount && expense.amount.toString().includes(lowerQuery)) {
+                    return true;
+                }
+                return false;
+            });
+        }
+
         function updateTable() {
             const showAll = document.getElementById('showAllToggle').checked;
             document.querySelector('.month-navigation').style.display = showAll ? 'none' : 'flex';
 
-            expensesForTable = showAll
+            const baseExpenses = showAll
                 ? allExpenses.slice().sort((a, b) => new Date(b.date) - new Date(a.date))
                 : getMonthExpenses(allExpenses);
+            
+            // Apply search filter
+            expensesForTable = filterExpenses(baseExpenses, searchQuery);
             
             const tableContainer = document.getElementById('tableContainer');
             tableContainer.innerHTML = createTable(expensesForTable);
@@ -378,6 +418,11 @@
         }
 
         document.getElementById('showAllToggle').addEventListener('change', updateTable);
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            updateTable();
+        });
 
         document.getElementById('prevMonth').addEventListener('click', () => {
             currentDate.setMonth(currentDate.getMonth() - 1);

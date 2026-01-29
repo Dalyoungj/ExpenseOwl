@@ -17,6 +17,10 @@ html[data-theme='light'] {
     --border: #e6ddd4;
 }
 
+html[data-theme='light'] .search-container input {
+    background-color: #faecdd !important;
+}
+
 /* Dark theme override */
 html[data-theme='dark'] {
     --bg-primary: #081528;
@@ -35,6 +39,16 @@ html[data-theme='dark'] {
         --text-secondary: #3e3e3e;
         --border: #e6ddd4;
     }
+}
+
+html {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+*, *::before, *::after {
+    box-sizing: inherit;
 }
 
 body {
@@ -160,6 +174,35 @@ header {
 .chart-box canvas {
     width: 100%;
     max-height: 380px;
+}
+
+.back-to-categories-btn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 28px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    z-index: 10;
+    opacity: 0.6;
+    padding: 0;
+}
+
+.back-to-categories-btn:hover {
+    color: var(--accent);
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.1);
+}
+
+body.subcategory-view .back-to-categories-btn {
+    display: flex;
 }
 
 .chart-back-button {
@@ -939,8 +982,46 @@ header {
         padding: 0.75rem;
     }
 
+    #tableContainer {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .expense-table {
+        min-width: 100%;
+        table-layout: fixed;
+    }
+
+    .expense-table th:first-child,
+    .expense-table td:first-child {
+        width: 35%;
+    }
+
+    .expense-table th:nth-child(2),
+    .expense-table td:nth-child(2) {
+        width: 30%;
+    }
+
+    .expense-table th:nth-child(3),
+    .expense-table td:nth-child(3) {
+        width: 25%;
+    }
+
+    .expense-table th:last-child,
+    .expense-table td:last-child {
+        width: 10%;
+        padding: 0.5rem 0.25rem;
+    }
+
+    .expense-table .edit-button,
+    .expense-table .delete-button {
+        padding: 4px 6px;
+        margin: 0 2px;
+    }
+
     .container {
         padding: 0.5rem;
+        box-sizing: border-box;
     }
 
     .chart-container {
@@ -988,6 +1069,14 @@ header {
 
     .expense-form {
         grid-template-columns: 1fr;
+    }
+
+    .form-actions-row {
+        justify-content: space-between;
+    }
+
+    .form-group-submit {
+        justify-content: flex-end;
     }
 
     .subcategory-input-container {
@@ -1100,13 +1189,27 @@ header {
     justify-content: center;
 }
 
+.form-actions-row {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+}
+
+.form-group-submit {
+    display: flex;
+    justify-content: center;
+}
+
 .table-controls {
     display: flex;
     justify-content: center;
     align-items: center;
+    gap: 1rem;
     margin-bottom: 1rem;
     margin-top: 1.5rem;
-
+    flex-wrap: wrap;
 }
 
 .table-controls label {
@@ -1123,4 +1226,61 @@ header {
 
 .table-controls label:hover {
     background-color: var(--accent);
+}
+
+.search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-container input {
+    padding: 0.5rem 2.5rem 0.5rem 1rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 9999px !important;
+    background-color: var(--bg-secondary) !important;
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    font-size: 0.9rem;
+    min-width: 250px;
+    transition: all 0.2s;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    box-shadow: none !important;
+}
+
+.search-container input:focus {
+    outline: none !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(105, 175, 222, 0.1) !important;
+    background-color: var(--bg-secondary) !important;
+}
+
+.search-container input::placeholder {
+    color: var(--text-secondary);
+}
+
+.search-icon {
+    position: absolute;
+    right: 1rem;
+    color: var(--text-secondary);
+    pointer-events: none;
+}
+
+@media (max-width: 768px) {
+    .search-container input {
+        min-width: 200px;
+    }
+    
+    .table-controls {
+        gap: 1rem;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .table-controls label {
+        width: 100%;
+        justify-content: center;
+    }
 }

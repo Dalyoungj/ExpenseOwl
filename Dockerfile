@@ -2,10 +2,16 @@ FROM golang:alpine AS builder
 
 WORKDIR /app
 
-COPY . .
+# Copy go mod files first for better caching
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Build the application
-RUN go build -o expenseowl ./cmd/expenseowl
+# Copy source code
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+
+# Build the application with verbose output
+RUN go build -v -o expenseowl ./cmd/expenseowl
 
 # Use a minimal alpine image for running
 FROM alpine:latest

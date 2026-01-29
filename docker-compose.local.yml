@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   expenseowl:
-    build: .
+    image: dalyoungj/expenseowl:latest  # 빌드한 이미지 사용
     ports:
       - "8080:8080"
     environment:

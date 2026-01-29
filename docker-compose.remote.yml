@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  expenseowl:
+    image: dalyoungj/expenseowl:latest
+    container_name: expenseowl
+    ports:
+      - "8080:8080"
+    environment:
+      STORAGE_TYPE: postgres
+      STORAGE_URL: 192.168.4.100:5432/expenseowl
+      STORAGE_USER: postgres
+      STORAGE_PASS: your_password  # 실제 비밀번호로 변경
+      STORAGE_SSL: disable
+    restart: unless-stopped

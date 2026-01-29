@@ -309,6 +309,35 @@ All four fields must match for an entry to be considered a duplicate. This preve
 
 Works with both JSON and PostgreSQL storage backends.
 
+## UI/UX Improvements
+
+### Dashboard Enhancements
+- **Improved Layout**: Expense add form now appears above "All Categories" breadcrumb for better workflow
+- **SubCategory Field**: Added subcategory input field to expense form for immediate classification
+- **Mobile Optimization**: 
+  - Report Gain checkbox and Add Expense button positioned side-by-side on mobile
+  - Optimized form layout for smaller screens
+
+### Table View Search
+- **Real-time Search**: Added search functionality to filter expenses instantly
+- **Multi-field Search**: Searches across name, category, subcategory, tags, and amount
+- **Smart Layout**: Search bar positioned above "Show All Transactions" toggle
+- **Mobile-friendly**: Search input maintains optimal size on mobile devices
+
+### Mobile Responsiveness
+- **Improved Table Layout**: 
+  - Name column: 35% width for better readability
+  - Category column: 30% width
+  - Amount column: 25% width
+  - Action buttons: 10% width with reduced padding
+- **Consistent Spacing**: Uniform margins across all mobile components
+- **Touch-optimized**: Larger touch targets for edit/delete buttons
+
+### CSS Improvements
+- **Global Box-sizing**: Applied `box-sizing: border-box` to all elements for consistent layout
+- **Browser Compatibility**: Added `-webkit-appearance: none` to remove default browser styling
+- **Cache Busting**: Added version parameter to CSS files (`?v=2`) to ensure updates are loaded
+
 ## Original Repository
 
 This is a fork of [tanq16/expenseowl](https://github.com/tanq16/expenseowl). All credit for the core application goes to the original author.
