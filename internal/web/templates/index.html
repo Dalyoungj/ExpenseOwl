@@ -55,8 +55,6 @@
             <button id="nextMonth" class="nav-button"><i class="fa-solid fa-arrow-right"></i></button>
         </div>
 
-        <div id="breadcrumb" class="breadcrumb-container"></div>
-
         <div class="table-controls">
             <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Add Expense</button>
         </div>
@@ -114,10 +112,15 @@
             </div>
         </div>
 
+        <div id="breadcrumb" class="breadcrumb-container"></div>
+
         <div class="chart-container">
             <div id="noDataMessage" class="no-data" style="display: none; width: 100%;">No expenses recorded this month.</div>
             <div class="chart-box">
                 <canvas id="categoryPieChart"></canvas>
+                <button id="backToCategories" class="chart-back-button" style="display: none;" onclick="returnToCategoryView()">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
             </div>
             <div class="legend-box" id="customLegend">
             </div>
@@ -163,15 +166,18 @@
 
         function renderBreadcrumb() {
             const breadcrumbContainer = document.getElementById('breadcrumb');
+            const backButton = document.getElementById('backToCategories');
             
             if (viewMode === 'category') {
                 breadcrumbContainer.innerHTML = '<span class="breadcrumb-current">All Categories</span>';
+                if (backButton) backButton.style.display = 'none';
             } else {
                 breadcrumbContainer.innerHTML = `
                     <a href="#" class="breadcrumb-link" onclick="returnToCategoryView(); return false;">All Categories</a>
                     <span class="breadcrumb-separator"> &gt; </span>
                     <span class="breadcrumb-current">${escapeHTML(selectedCategory)}</span>
                 `;
+                if (backButton) backButton.style.display = 'flex';
             }
         }
 
@@ -351,8 +357,30 @@
         }
 
         function createPieChart(categoryData) {
-            if (pieChart) pieChart.destroy();
-            pieChart = new Chart('categoryPieChart', {
+            // Completely destroy the old chart and clean up
+            if (pieChart) {
+                try {
+                    pieChart.destroy();
+                } catch (e) {
+                    console.warn('Error destroying chart:', e);
+                }
+                pieChart = null;
+            }
+            
+            // Get the canvas element and its parent
+            const oldCanvas = document.getElementById('categoryPieChart');
+            const parent = oldCanvas.parentElement;
+            
+            // Remove the old canvas completely
+            oldCanvas.remove();
+            
+            // Create a fresh canvas element
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'categoryPieChart';
+            parent.appendChild(newCanvas);
+            
+            // Create the chart on the fresh canvas
+            pieChart = new Chart(newCanvas, {
                 type: 'doughnut',
                 data: {
                     labels: categoryData.map(c => c.category),
@@ -366,11 +394,13 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    events: ['click', 'mousemove'], // Explicitly define which events to handle
                     plugins: {
                         legend: {
                             display: false
                         },
                         tooltip: {
+                            enabled: true,
                             callbacks: {
                                 label: (context) => {
                                     const value = context.raw;
@@ -393,7 +423,11 @@
                             );
                             
                             if (hasSubCategories) {
-                                drillDownToSubCategories(category);
+                                // Use setTimeout to defer the drill-down until after the click event completes
+                                // This prevents the chart from being destroyed while Chart.js is still processing the event
+                                setTimeout(() => {
+                                    drillDownToSubCategories(category);
+                                }, 0);
                             }
                         }
                     }
