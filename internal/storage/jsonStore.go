@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -366,11 +367,17 @@ func (s *jsonStore) FindDuplicateExpense(name string, category string, amount fl
 	// Normalize date to day precision (ignore time)
 	targetDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 	
+	// Normalize name and category for comparison (case-insensitive, trimmed)
+	normalizedName := strings.ToLower(strings.TrimSpace(name))
+	normalizedCategory := strings.ToLower(strings.TrimSpace(category))
+	
 	for _, exp := range data.Expenses {
 		expDate := time.Date(exp.Date.Year(), exp.Date.Month(), exp.Date.Day(), 0, 0, 0, 0, time.UTC)
+		expName := strings.ToLower(strings.TrimSpace(exp.Name))
+		expCategory := strings.ToLower(strings.TrimSpace(exp.Category))
 		
-		if exp.Name == name &&
-			exp.Category == category &&
+		if expName == normalizedName &&
+			expCategory == normalizedCategory &&
 			exp.Amount == amount &&
 			expDate.Equal(targetDate) {
 			return true, nil

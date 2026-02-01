@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -364,16 +365,20 @@ func (s *databaseStore) FindDuplicateExpense(name string, category string, amoun
 	targetDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 	nextDay := targetDate.AddDate(0, 0, 1)
 	
+	// Normalize name and category for comparison (case-insensitive, trimmed)
+	normalizedName := strings.ToLower(strings.TrimSpace(name))
+	normalizedCategory := strings.ToLower(strings.TrimSpace(category))
+	
 	query := `
 		SELECT COUNT(*) FROM expenses 
-		WHERE name = $1 
-		AND category = $2 
+		WHERE LOWER(TRIM(name)) = $1 
+		AND LOWER(TRIM(category)) = $2 
 		AND amount = $3 
 		AND date >= $4 
 		AND date < $5
 	`
 	var count int
-	err := s.db.QueryRow(query, name, category, amount, targetDate, nextDay).Scan(&count)
+	err := s.db.QueryRow(query, normalizedName, normalizedCategory, amount, targetDate, nextDay).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check for duplicate expense: %v", err)
 	}
