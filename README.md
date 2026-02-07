@@ -313,16 +313,29 @@ Works with both JSON and PostgreSQL storage backends.
 
 ### Dashboard Enhancements
 - **Improved Layout**: Expense add form now appears above "All Categories" breadcrumb for better workflow
-- **SubCategory Field**: Added subcategory input field to expense form for immediate classification
+- **SubCategory Field**: Added subcategory dropdown to expense form for immediate classification
+  - Dynamically populated based on selected category
+  - Fetches subcategories from API endpoint
+  - Consistent behavior across Dashboard and Table views
 - **Mobile Optimization**: 
   - Report Gain checkbox and Add Expense button positioned side-by-side on mobile
   - Optimized form layout for smaller screens
 
-### Table View Search
+### Table View Enhancements
 - **Real-time Search**: Added search functionality to filter expenses instantly
 - **Multi-field Search**: Searches across name, category, subcategory, tags, and amount
 - **Smart Layout**: Search bar positioned above "Show All Transactions" toggle
+- **Sortable Columns**: Click Date or Amount column headers to sort
+  - Toggle between ascending and descending order
+  - Visual indicators (↑/↓) show current sort direction
+  - Hover effect on sortable headers for better UX
 - **Mobile-friendly**: Search input maintains optimal size on mobile devices
+
+### Category Name Support
+- **Special Characters**: Category names now support `&` and other special characters
+  - Fixed validation regex to allow ampersands in category names
+  - Proper handling during CSV import and export
+  - Consistent display across all views (Dashboard, Table, Settings)
 
 ### Mobile Responsiveness
 - **Improved Table Layout**: 

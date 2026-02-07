@@ -403,6 +403,11 @@ body.subcategory-view .back-to-categories-btn {
     border-bottom: 1px solid var(--border);
 }
 
+.expense-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
 .expense-table th {
     background-color: var(--bg-primary);
     font-weight: 600;

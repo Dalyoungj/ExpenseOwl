@@ -136,6 +136,8 @@
         let allTags = new Set();
         let selectedTags = new Set();
         let searchQuery = '';
+        let sortColumn = 'date'; // 'date' or 'amount'
+        let sortDirection = 'desc'; // 'asc' or 'desc'
 
         async function updateSubCategoryOptions(category) {
             const subCategorySelect = document.getElementById('subCategory');
@@ -168,16 +170,22 @@
                 return `<div class="no-data">${message}</div>`;
             }
             const hasTags = expenses.some(exp => exp.tags && exp.tags.length > 0);
+            
+            const nameIcon = sortColumn === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : '';
+            const categoryIcon = sortColumn === 'category' ? (sortDirection === 'asc' ? '↑' : '↓') : '';
+            const dateIcon = sortColumn === 'date' ? (sortDirection === 'asc' ? '↑' : '↓') : '';
+            const amountIcon = sortColumn === 'amount' ? (sortDirection === 'asc' ? '↑' : '↓') : '';
+            
             return `
                 <table class="expense-table">
                     <thead>
                         <tr>
-                            <th>Name</th>
-                            <th>Category</th>
+                            <th class="sortable" onclick="sortTable('name')">Name ${nameIcon}</th>
+                            <th class="sortable" onclick="sortTable('category')">Category ${categoryIcon}</th>
                             <th class="subcategory-column">SubCategory</th>
                             ${hasTags ? '<th class="tags-column">Tags</th>' : ''}
-                            <th>Amount</th>
-                            <th class="date-header">Date</th>
+                            <th class="sortable" onclick="sortTable('amount')">Amount ${amountIcon}</th>
+                            <th class="date-header sortable" onclick="sortTable('date')">Date ${dateIcon}</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -236,16 +244,57 @@
             });
         }
 
+        function sortTable(column) {
+            // Toggle direction if clicking the same column
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                // Default to ascending for text columns, descending for numeric/date
+                sortDirection = (column === 'name' || column === 'category') ? 'asc' : 'desc';
+            }
+            updateTable();
+        }
+
+        function sortExpenses(expenses) {
+            return expenses.slice().sort((a, b) => {
+                let compareA, compareB;
+                
+                if (sortColumn === 'date') {
+                    compareA = new Date(a.date);
+                    compareB = new Date(b.date);
+                } else if (sortColumn === 'amount') {
+                    compareA = a.amount;
+                    compareB = b.amount;
+                } else if (sortColumn === 'name') {
+                    compareA = (a.name || '').toLowerCase();
+                    compareB = (b.name || '').toLowerCase();
+                } else if (sortColumn === 'category') {
+                    compareA = (a.category || '').toLowerCase();
+                    compareB = (b.category || '').toLowerCase();
+                }
+                
+                if (sortDirection === 'asc') {
+                    return compareA > compareB ? 1 : compareA < compareB ? -1 : 0;
+                } else {
+                    return compareA < compareB ? 1 : compareA > compareB ? -1 : 0;
+                }
+            });
+        }
+
         function updateTable() {
             const showAll = document.getElementById('showAllToggle').checked;
             document.querySelector('.month-navigation').style.display = showAll ? 'none' : 'flex';
 
             const baseExpenses = showAll
-                ? allExpenses.slice().sort((a, b) => new Date(b.date) - new Date(a.date))
+                ? allExpenses
                 : getMonthExpenses(allExpenses);
             
             // Apply search filter
-            expensesForTable = filterExpenses(baseExpenses, searchQuery);
+            const filtered = filterExpenses(baseExpenses, searchQuery);
+            
+            // Apply sorting
+            expensesForTable = sortExpenses(filtered);
             
             const tableContainer = document.getElementById('tableContainer');
             tableContainer.innerHTML = createTable(expensesForTable);

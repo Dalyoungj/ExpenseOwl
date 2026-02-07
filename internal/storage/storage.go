@@ -172,7 +172,7 @@ func InitializeStorage() (Storage, error) {
 	return nil, fmt.Errorf("invalid data store: %s", baseConfig.StorageType)
 }
 
-var REInvalidChars *regexp.Regexp = regexp.MustCompile(`[^\p{L}\p{N}\s.,\-'_!"]`)
+var REInvalidChars *regexp.Regexp = regexp.MustCompile(`[^\p{L}\p{N}\s.,\-'_!"&]`)
 var RERepeatingSpaces *regexp.Regexp = regexp.MustCompile(`\s+`)
 
 // allows readable chars like unicode, otherwise replaces with whitespace
