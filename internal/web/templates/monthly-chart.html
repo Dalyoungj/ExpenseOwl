@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/fa.min.css">
+    <link rel="stylesheet" href="/style.css?v=2">
+    <script>
+        (function() {
+            const theme = localStorage.getItem('theme') || 'system';
+            if (theme === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            } else if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
+    <title>ExpenseOwl Monthly Chart</title>
+    <script src="/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="nav-bar">
+                <a href="/">
+                    <img src="/pwa/icon-192.png" alt="ExpenseOwl Logo" height="85" style="vertical-align: middle; margin-right: 20px;">
+                </a>
+                <a href="/" class="view-button" data-tooltip="Dashboard">
+                    <i class="fa-solid fa-chart-pie"></i>
+                </a>
+                <a href="/table" class="view-button" data-tooltip="Table View">
+                    <i class="fa-solid fa-table"></i>
+                </a>
+                <a href="/monthly-chart" class="view-button active" data-tooltip="Monthly Chart">
+                    <i class="fa-solid fa-chart-line"></i>
+                </a>
+                <a href="/settings" class="view-button" data-tooltip="Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </a>
+            </div>
+        </header>
+
+        <div class="form-container">
+            <div class="chart-controls">
+                <div class="control-group">
+                    <label for="monthsSelect">Period:</label>
+                    <select id="monthsSelect">
+                        <option value="6">6 Months</option>
+                        <option value="12" selected>12 Months</option>
+                        <option value="24">24 Months</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>Categories:</label>
+                    <div class="custom-multiselect">
+                        <div class="multiselect-trigger" id="categoryTrigger">
+                            <span class="multiselect-label" id="categoryLabel">All Categories</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </div>
+                        <div class="multiselect-dropdown" id="categoryDropdown" style="display: none;">
+                            <div class="multiselect-search">
+                                <input type="text" id="categorySearch" placeholder="Search categories...">
+                            </div>
+                            <div class="multiselect-options" id="categoryOptions">
+                                <!-- Dynamically populated -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="loadingIndicator" class="loading" style="display: none;">Loading...</div>
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+        
+        <div class="chart-container" id="chartContainerWrapper">
+            <canvas id="monthlyChart"></canvas>
+        </div>
+    </div>
+
+    <script src="/functions.js"></script>
+    <script>
+        let currentCurrency = 'usd';
+        let chartInstance = null;
+        let selectedMonths = 12;
+        let selectedCategories = [];
+        let allCategories = [];
+
+        // Initialize function
+        async function initialize() {
+            try {
+                // Load config (currency, categories)
+                const configResponse = await fetch('/config');
+                if (!configResponse.ok) throw new Error('Failed to fetch configuration');
+                const config = await configResponse.json();
+                
+                currentCurrency = config.currency;
+                allCategories = config.categories || [];
+                
+                // Populate category dropdown
+                populateCategoryDropdown();
+                
+                // Setup event listeners
+                setupCategoryDropdown();
+                
+                // Load and render chart data
+                await loadAndRenderChart();
+                
+                // Register event listeners
+                document.getElementById('monthsSelect').addEventListener('change', onFilterChange);
+            } catch (error) {
+                console.error('Failed to initialize monthly chart:', error);
+                showError('Failed to initialize chart. Please try again.');
+            }
+        }
+
+        // Populate category dropdown with checkboxes
+        function populateCategoryDropdown() {
+            const optionsContainer = document.getElementById('categoryOptions');
+            optionsContainer.innerHTML = allCategories.map(cat => `
+                <label class="multiselect-option">
+                    <input type="checkbox" value="${escapeHTML(cat)}" class="category-checkbox">
+                    <span>${escapeHTML(cat)}</span>
+                </label>
+            `).join('');
+            
+            // Add event listeners to checkboxes
+            document.querySelectorAll('.category-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', onCategorySelectionChange);
+            });
+        }
+
+        // Setup category dropdown behavior
+        function setupCategoryDropdown() {
+            const trigger = document.getElementById('categoryTrigger');
+            const dropdown = document.getElementById('categoryDropdown');
+            const searchInput = document.getElementById('categorySearch');
+            
+            // Toggle dropdown
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = dropdown.style.display === 'block';
+                dropdown.style.display = isVisible ? 'none' : 'block';
+                if (!isVisible) {
+                    searchInput.focus();
+                }
+            });
+            
+            // Search functionality
+            searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                document.querySelectorAll('.multiselect-option').forEach(option => {
+                    const text = option.textContent.toLowerCase();
+                    option.style.display = text.includes(searchTerm) ? 'flex' : 'none';
+                });
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+            
+            // Prevent dropdown from closing when clicking inside
+            dropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+
+        // Handle category selection change
+        function onCategorySelectionChange() {
+            const checkboxes = document.querySelectorAll('.category-checkbox');
+            selectedCategories = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            updateCategoryLabel();
+            onFilterChange();
+        }
+
+        // Update the category label text
+        function updateCategoryLabel() {
+            const label = document.getElementById('categoryLabel');
+            if (selectedCategories.length === 0) {
+                label.textContent = 'All Categories';
+            } else if (selectedCategories.length === 1) {
+                label.textContent = selectedCategories[0];
+            } else if (selectedCategories.length === allCategories.length) {
+                label.textContent = 'All Categories';
+            } else {
+                label.textContent = `${selectedCategories.length} Categories`;
+            }
+        }
+
+        // Fetch monthly data from API
+        async function fetchMonthlyData(months, categories) {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            try {
+                loadingIndicator.style.display = 'block';
+                errorMessage.style.display = 'none';
+                
+                let url = `/api/expenses/monthly?months=${months}`;
+                if (categories && categories.length > 0) {
+                    url += `&categories=${categories.join(',')}`;
+                }
+                
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                loadingIndicator.style.display = 'none';
+                return data;
+            } catch (error) {
+                loadingIndicator.style.display = 'none';
+                console.error('Error fetching monthly data:', error);
+                throw error;
+            }
+        }
+
+        // Render chart with Chart.js
+        function renderChart(data) {
+            const canvas = document.getElementById('monthlyChart');
+            const chartContainer = document.getElementById('chartContainerWrapper');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            // Handle empty data
+            if (!data || data.length === 0) {
+                if (chartInstance) {
+                    chartInstance.destroy();
+                    chartInstance = null;
+                }
+                chartContainer.style.display = 'none';
+                errorMessage.textContent = 'No data to display';
+                errorMessage.style.display = 'block';
+                return;
+            }
+            
+            chartContainer.style.display = 'block';
+            errorMessage.style.display = 'none';
+            
+            // Destroy existing chart instance
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+            
+            // Helper function to format currency without decimals for Y-axis
+            function formatCurrencyNoDecimals(amount) {
+                const behavior = currencyBehaviors[currentCurrency] || {
+                    symbol: "$",
+                    useComma: false,
+                    useDecimals: true,
+                    useSpace: false,
+                    right: false,
+                };
+                const absAmount = Math.abs(amount);
+                const options = {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 0,
+                };
+                let formattedAmount = new Intl.NumberFormat(behavior.useComma ? "de-DE" : "en-US", options).format(absAmount);
+                let result = behavior.right
+                    ? `${formattedAmount}${behavior.useSpace ? " " : ""}${behavior.symbol}`
+                    : `${behavior.symbol}${behavior.useSpace ? " " : ""}${formattedAmount}`;
+                return result;
+            }
+            
+            // Create new chart
+            chartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.month),
+                    datasets: [{
+                        label: 'Expenses',
+                        data: data.map(d => d.total_expenses),
+                        borderColor: colorPalette[0],
+                        backgroundColor: `${colorPalette[0]}33`,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Monthly Expense Trend',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += formatCurrency(context.parsed.y);
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCurrencyNoDecimals(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Filter change handler
+        async function onFilterChange() {
+            selectedMonths = parseInt(document.getElementById('monthsSelect').value);
+            await loadAndRenderChart();
+        }
+
+        // Load and render chart
+        async function loadAndRenderChart() {
+            try {
+                const data = await fetchMonthlyData(selectedMonths, selectedCategories);
+                renderChart(data);
+            } catch (error) {
+                showError('Failed to load chart data. Please try again.');
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            const chartContainer = document.getElementById('chartContainerWrapper');
+            
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            chartContainer.style.display = 'none';
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>

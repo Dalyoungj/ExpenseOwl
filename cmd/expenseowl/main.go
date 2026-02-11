@@ -46,6 +46,7 @@ func runServer(port int) {
 	})
 	http.HandleFunc("/table", handler.ServeTableView)
 	http.HandleFunc("/settings", handler.ServeSettingsPage)
+	http.HandleFunc("/monthly-chart", handler.ServeMonthlyChartView)
 
 	// Static File Handlers
 	http.HandleFunc("/functions.js", handler.ServeStaticFile)
@@ -97,6 +98,9 @@ func runServer(port int) {
 
 	// TRMNL Integration
 	http.HandleFunc("/api/trmnl", handler.GetTRMNLData)
+
+	// Monthly Expense Chart API
+	http.HandleFunc("/api/expenses/monthly", handler.GetMonthlyExpenses)
 
 	log.Println("Starting server on port", port, "...")
 	if err := http.ListenAndServe(fmt.Sprint(":", port), nil); err != nil {

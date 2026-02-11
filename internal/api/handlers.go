@@ -567,6 +567,17 @@ func (h *Handler) ServeSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) ServeMonthlyChartView(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	if err := web.ServeTemplate(w, "monthly-chart.html"); err != nil {
+		http.Error(w, "Failed to serve template", http.StatusInternalServerError)
+	}
+}
+
 func (h *Handler) ServeStaticFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
@@ -575,4 +586,119 @@ func (h *Handler) ServeStaticFile(w http.ResponseWriter, r *http.Request) {
 	if err := web.ServeStatic(w, r.URL.Path); err != nil {
 		http.Error(w, "Failed to serve static file", http.StatusInternalServerError)
 	}
+}
+
+// ------------------------------------------------------------
+// Monthly Chart Handlers
+// ------------------------------------------------------------
+
+// GetMonthlyExpenses returns monthly aggregated expense data
+func (h *Handler) GetMonthlyExpenses(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+
+	// Parse query parameters
+	monthsStr := r.URL.Query().Get("months")
+	months := 12 // default value
+	if monthsStr != "" {
+		if parsed, err := strconv.Atoi(monthsStr); err == nil && parsed > 0 {
+			months = parsed
+		}
+	}
+
+	categoriesStr := r.URL.Query().Get("categories")
+	var filterCategories []string
+	if categoriesStr != "" {
+		filterCategories = []string{}
+		for _, cat := range splitAndTrim(categoriesStr, ",") {
+			if cat != "" {
+				filterCategories = append(filterCategories, cat)
+			}
+		}
+	}
+
+	// Get all expenses from storage
+	expenses, err := h.storage.GetAllExpenses()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to retrieve expenses"})
+		log.Printf("API ERROR: Failed to retrieve expenses: %v\n", err)
+		return
+	}
+
+	// Get start date from config
+	startDate, err := h.storage.GetStartDate()
+	if err != nil {
+		startDate = 1 // default fallback
+	}
+
+	// Apply category filtering if specified
+	filteredExpenses := expenses
+	if len(filterCategories) > 0 {
+		filteredExpenses = filterExpensesByCategories(expenses, filterCategories)
+	}
+
+	// Calculate monthly trend
+	monthlyData := calculateMonthlyTrend(filteredExpenses, startDate, months)
+
+	writeJSON(w, http.StatusOK, monthlyData)
+	log.Printf("HTTP: Served monthly expenses data (months=%d, categories=%v)\n", months, filterCategories)
+}
+
+// splitAndTrim splits a string by delimiter and trims whitespace from each part
+func splitAndTrim(s, delimiter string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := []string{}
+	for _, part := range splitString(s, delimiter) {
+		trimmed := trimWhitespace(part)
+		if trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return parts
+}
+
+// splitString splits a string by delimiter
+func splitString(s, delimiter string) []string {
+	if s == "" {
+		return []string{}
+	}
+	result := []string{}
+	current := ""
+	for _, char := range s {
+		if string(char) == delimiter {
+			result = append(result, current)
+			current = ""
+		} else {
+			current += string(char)
+		}
+	}
+	result = append(result, current)
+	return result
+}
+
+// trimWhitespace removes leading and trailing whitespace
+func trimWhitespace(s string) string {
+	start := 0
+	end := len(s)
+	
+	// Trim leading whitespace
+	for start < end && isWhitespace(s[start]) {
+		start++
+	}
+	
+	// Trim trailing whitespace
+	for end > start && isWhitespace(s[end-1]) {
+		end--
+	}
+	
+	return s[start:end]
+}
+
+// isWhitespace checks if a byte is whitespace
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }

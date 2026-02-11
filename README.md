@@ -46,11 +46,16 @@ So, I created this project and I use it in my home lab for expenses. The primary
     - Click on a category to exclude it from the pie chart; click again to add it back
     - Visualize the month's breakdown without considering some categories like Rent
     - Cashflow shows total income, total expenses, and balance (red or green based on +ve or -ve)
-2. Table view for detailed expense listing
+2. Monthly Chart - visualize expense trends over time
+    - Line chart showing monthly expense totals over 6, 12, or 24 months
+    - Filter by specific categories with searchable multi-select dropdown
+    - Interactive tooltips showing exact amounts for each month
+    - Responsive design optimized for both desktop and mobile
+3. Table view for detailed expense listing
     - View monthly or all expenses chronologically and delete them (hold shift to skip confirm)
     - Use the browser to search for a name or tags if needed
-    - Tags show up if at least one transaction uses it; 
-3. Settings page for configurations and additional features
+    - Tags show up if at least one transaction uses it;
+4. Settings page for configurations and additional features
     - Reorder, add, or remove custom categories
     - Select a custom currency symbol and a custom start date
     - Exporting data as CSV and import CSV from virtually anywhere
@@ -135,6 +140,7 @@ This is a community-contributed Kubernetes spec. Treat it as a sample and review
 Once deployed, use the web interface to do everything. Access it through your browser:
 
 - Dashboard: `http://localhost:8080/`
+- Monthly Chart: `http://localhost:8080/monthly-chart`
 - Table View: `http://localhost:8080/table`
 - Settings: `http://localhost:8080/settings`
 
@@ -310,6 +316,20 @@ All four fields must match for an entry to be considered a duplicate. This preve
 Works with both JSON and PostgreSQL storage backends.
 
 ## UI/UX Improvements
+
+### Monthly Chart View
+- **Trend Visualization**: New dedicated page for viewing expense trends over time
+  - Line chart showing monthly expense totals
+  - Configurable time periods: 6, 12, or 24 months
+  - Category filtering with searchable multi-select dropdown
+  - Real-time chart updates when filters change
+- **Smart Category Filter**:
+  - Search functionality to quickly find categories
+  - Checkbox selection for multiple categories
+  - Dynamic label showing selection count
+  - Dropdown closes automatically when clicking outside
+- **Responsive Design**: Optimized for both desktop and mobile devices
+- **Interactive Tooltips**: Hover over data points to see exact amounts
 
 ### Dashboard Enhancements
 - **Improved Layout**: Expense add form now appears above "All Categories" breadcrumb for better workflow
